@@ -1,0 +1,230 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   NexoPro — CSS Custom Properties por Nicho
+   O niche engine troca esses valores via data-niche no <html>
+   ============================================================ */
+
+:root {
+  /* Default (beleza/pink) */
+  --brand-50:  #fdf2f8;
+  --brand-100: #fce7f3;
+  --brand-200: #fbcfe8;
+  --brand-300: #f9a8d4;
+  --brand-400: #f472b6;
+  --brand-500: #ec4899;
+  --brand-600: #db2777;
+  --brand-700: #be185d;
+  --brand-800: #9d174d;
+  --brand-900: #831843;
+
+  --sidebar-width: 256px;
+}
+
+/* Nicho: beleza */
+[data-niche="beleza"] {
+  --brand-500: #ec4899;
+  --brand-600: #db2777;
+}
+
+/* Nicho: tecnico */
+[data-niche="tecnico"] {
+  --brand-50:  #fff7ed;
+  --brand-100: #ffedd5;
+  --brand-200: #fed7aa;
+  --brand-300: #fdba74;
+  --brand-400: #fb923c;
+  --brand-500: #f97316;
+  --brand-600: #ea580c;
+  --brand-700: #c2410c;
+  --brand-800: #9a3412;
+  --brand-900: #7c2d12;
+}
+
+/* Nicho: saude */
+[data-niche="saude"] {
+  --brand-50:  #ecfeff;
+  --brand-100: #cffafe;
+  --brand-200: #a5f3fc;
+  --brand-300: #67e8f9;
+  --brand-400: #22d3ee;
+  --brand-500: #06b6d4;
+  --brand-600: #0891b2;
+  --brand-700: #0e7490;
+  --brand-800: #155e75;
+  --brand-900: #164e63;
+}
+
+/* Nicho: juridico */
+[data-niche="juridico"] {
+  --brand-50:  #eff6ff;
+  --brand-100: #dbeafe;
+  --brand-200: #bfdbfe;
+  --brand-300: #93c5fd;
+  --brand-400: #60a5fa;
+  --brand-500: #3b82f6;
+  --brand-600: #2563eb;
+  --brand-700: #1d4ed8;
+  --brand-800: #1e40af;
+  --brand-900: #1e3a8a;
+}
+
+/* Nicho: imoveis */
+[data-niche="imoveis"] {
+  --brand-50:  #ecfdf5;
+  --brand-100: #d1fae5;
+  --brand-200: #a7f3d0;
+  --brand-300: #6ee7b7;
+  --brand-400: #34d399;
+  --brand-500: #10b981;
+  --brand-600: #059669;
+  --brand-700: #047857;
+  --brand-800: #065f46;
+  --brand-900: #064e3b;
+}
+
+/* Nicho: pet */
+[data-niche="pet"] {
+  --brand-50:  #f5f3ff;
+  --brand-100: #ede9fe;
+  --brand-200: #ddd6fe;
+  --brand-300: #c4b5fd;
+  --brand-400: #a78bfa;
+  --brand-500: #8b5cf6;
+  --brand-600: #7c3aed;
+  --brand-700: #6d28d9;
+  --brand-800: #5b21b6;
+  --brand-900: #4c1d95;
+}
+
+/* Nicho: educacao */
+[data-niche="educacao"] {
+  --brand-50:  #fefce8;
+  --brand-100: #fef9c3;
+  --brand-200: #fef08a;
+  --brand-300: #fde047;
+  --brand-400: #facc15;
+  --brand-500: #eab308;
+  --brand-600: #ca8a04;
+  --brand-700: #a16207;
+  --brand-800: #854d0e;
+  --brand-900: #713f12;
+}
+
+/* Nicho: nutricao */
+[data-niche="nutricao"] {
+  --brand-50:  #f0fdf4;
+  --brand-100: #dcfce7;
+  --brand-200: #bbf7d0;
+  --brand-300: #86efac;
+  --brand-400: #4ade80;
+  --brand-500: #22c55e;
+  --brand-600: #16a34a;
+  --brand-700: #15803d;
+  --brand-800: #166534;
+  --brand-900: #14532d;
+}
+
+/* Nicho: engenharia */
+[data-niche="engenharia"] {
+  --brand-50:  #fafaf9;
+  --brand-100: #f5f5f4;
+  --brand-200: #e7e5e4;
+  --brand-300: #d6d3d1;
+  --brand-400: #a8a29e;
+  --brand-500: #78716c;
+  --brand-600: #57534e;
+  --brand-700: #44403c;
+  --brand-800: #292524;
+  --brand-900: #1c1917;
+}
+
+/* Nicho: fotografia */
+[data-niche="fotografia"] {
+  --brand-50:  #eef2ff;
+  --brand-100: #e0e7ff;
+  --brand-200: #c7d2fe;
+  --brand-300: #a5b4fc;
+  --brand-400: #818cf8;
+  --brand-500: #6366f1;
+  --brand-600: #4f46e5;
+  --brand-700: #4338ca;
+  --brand-800: #3730a3;
+  --brand-900: #312e81;
+}
+
+/* ============================================================
+   Componentes base
+   ============================================================ */
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  /* Scrollbar customizado */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #e5e7eb transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #e5e7eb;
+    border-radius: 2px;
+  }
+
+  /* Card padrão */
+  .card {
+    @apply bg-white rounded-xl border border-gray-200 shadow-sm;
+  }
+
+  /* Botão primário (usa CSS var do nicho) */
+  .btn-primary {
+    background-color: var(--brand-500);
+    @apply text-white font-medium px-4 py-2 rounded-lg transition-all duration-200;
+  }
+
+  .btn-primary:hover {
+    background-color: var(--brand-600);
+    @apply shadow-md;
+  }
+
+  /* Badge de plano */
+  .badge-plan {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-plan.trial     { @apply bg-gray-100 text-gray-600; }
+  .badge-plan.starter   { @apply bg-blue-100 text-blue-700; }
+  .badge-plan.pro       { @apply bg-purple-100 text-purple-700; }
+  .badge-plan.pro_plus  { @apply bg-orange-100 text-orange-700; }
+  .badge-plan.enterprise { @apply bg-gradient-to-r from-yellow-100 to-orange-100 text-orange-800; }
+}
+
+@layer utilities {
+  .text-brand { color: var(--brand-500); }
+  .bg-brand { background-color: var(--brand-500); }
+  .border-brand { border-color: var(--brand-500); }
+  .ring-brand { --tw-ring-color: var(--brand-500); }
+}
