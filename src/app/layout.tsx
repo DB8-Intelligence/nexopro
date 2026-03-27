@@ -1,15 +1,18 @@
 import type { Metadata } from 'next'
+import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: {
-    default: 'NexoPro',
+    default: 'NexoPro — Gestão completa para pequenos negócios',
     template: '%s | NexoPro',
   },
-  description: 'Plataforma de gestão para pequenos negócios',
+  description: 'Agenda, clientes, financeiro, DRE, notas fiscais e Agente IA Contador. Feito para MEIs e pequenas empresas brasileiras.',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://nexopro.app'),
   robots: {
-    index: false,
-    follow: false,
+    index: true,
+    follow: true,
   },
 }
 
@@ -28,7 +31,11 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+        <SpeedInsights />
+      </body>
     </html>
   )
 }

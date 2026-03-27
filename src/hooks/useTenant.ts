@@ -27,11 +27,12 @@ export function useTenant(tenantId?: string) {
 
     async function load() {
       setState(s => ({ ...s, loading: true }))
+      const id = tenantId as string
 
       const [tenantRes, settingsRes, modulesRes] = await Promise.all([
-        supabase.from('tenants').select('*').eq('id', tenantId).single(),
-        supabase.from('tenant_settings').select('*').eq('tenant_id', tenantId).single(),
-        supabase.from('tenant_modules').select('*').eq('tenant_id', tenantId).eq('is_enabled', true),
+        supabase.from('tenants').select('*').eq('id', id).single(),
+        supabase.from('tenant_settings').select('*').eq('tenant_id', id).single(),
+        supabase.from('tenant_modules').select('*').eq('tenant_id', id).eq('is_enabled', true),
       ])
 
       setState({
@@ -55,7 +56,8 @@ export function useTenant(tenantId?: string) {
 
     const { error } = await supabase
       .from('tenant_settings')
-      .update(updates)
+      // Supabase generic types not yet generated — cast to unknown
+      .update(updates as unknown as Record<string, unknown>)
       .eq('id', state.settings.id)
 
     if (!error) {

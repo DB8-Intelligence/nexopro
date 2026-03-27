@@ -83,6 +83,11 @@ export interface Tenant {
   primary_color: string
   is_active: boolean
   trial_ends_at: string | null
+  stripe_customer_id: string | null
+  stripe_subscription_id: string | null
+  stripe_price_id: string | null
+  billing_cycle_anchor: string | null
+  cancel_at_period_end: boolean
   created_at: string
   updated_at: string
 }
@@ -409,6 +414,128 @@ export interface MediaLibrary {
 }
 
 // ============================================================
+// IMOB MODULE (004)
+// ============================================================
+
+export type PropertyStatus =
+  | 'new'
+  | 'uploading'
+  | 'processing'
+  | 'caption_ready'
+  | 'video_processing'
+  | 'ready'
+  | 'published'
+  | 'error'
+
+export interface Property {
+  id: string
+  tenant_id: string
+  user_id: string | null
+  title: string | null
+  description: string | null
+  price: string | null
+  city: string | null
+  neighborhood: string | null
+  property_type: string | null
+  property_standard: string | null
+  investment_value: number | null
+  built_area_m2: number | null
+  highlights: string | null
+  cover_url: string | null
+  images: string[]
+  status: PropertyStatus
+  source: string
+  db8_agent_id: string | null
+  generated_caption: string | null
+  generated_video_url: string | null
+  generated_post_text: string | null
+  error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PropertyMedia {
+  id: string
+  property_id: string
+  tenant_id: string
+  url: string
+  type: 'image' | 'video'
+  order_index: number
+  created_at: string
+}
+
+export interface BrandTemplate {
+  id: string
+  tenant_id: string
+  name: string
+  config: Record<string, unknown>
+  preview_url: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type ContentProjectStatus =
+  | 'pending'
+  | 'analyzing'
+  | 'configuring'
+  | 'generating_images'
+  | 'generating_voice'
+  | 'generating_video'
+  | 'ready'
+  | 'error'
+
+export interface ContentScene {
+  id: number
+  description: string
+  duration_sec: number
+  image_prompt?: string
+}
+
+export interface ContentAnalysis {
+  title: string
+  target_audience: string
+  key_messages: string[]
+  tone: string
+  suggested_format: string
+  scenes: ContentScene[]
+  hook: string
+  cta: string
+}
+
+export interface ContentCTA {
+  text: string
+  type: 'whatsapp' | 'link' | 'phone'
+  value: string
+}
+
+export interface ContentProject {
+  id: string
+  tenant_id: string
+  user_id: string | null
+  title: string | null
+  source_url: string | null
+  source_description: string | null
+  status: ContentProjectStatus
+  nicho: string | null
+  formato: string | null
+  plan_at_creation: string | null
+  analysis: ContentAnalysis | null
+  generated_scenes: ContentScene[] | null
+  generated_images: Array<{ scene_id: number; url: string; prompt: string }> | null
+  generated_voice_url: string | null
+  generated_video_url: string | null
+  generated_post_text: string | null
+  generated_caption: string | null
+  generated_hashtags: string[]
+  generated_ctas: ContentCTA[] | null
+  talking_object_options: Array<{ id: string; name: string; emoji: string; prompt: string }> | null
+  talking_object_selected: { id: string; name: string; emoji: string } | null
+  created_at: string
+  updated_at: string
+}
+
+// ============================================================
 // SYSTEM TABLES
 // ============================================================
 
@@ -474,6 +601,58 @@ export interface FluxoCaixaData {
     saidas: number
     saldo: number
   }>
+}
+
+// ============================================================
+// STOCK + COURSES (007)
+// ============================================================
+
+export interface Product {
+  id: string
+  tenant_id: string
+  name: string
+  sku: string | null
+  category: string | null
+  description: string | null
+  price: number
+  cost: number
+  stock_quantity: number
+  min_quantity: number
+  unit: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Course {
+  id: string
+  tenant_id: string
+  name: string
+  description: string | null
+  category: string | null
+  instructor: string | null
+  price: number
+  duration_hours: number | null
+  capacity: number | null
+  enrolled: number
+  starts_at: string | null
+  ends_at: string | null
+  schedule: string | null
+  modality: 'presencial' | 'online' | 'hibrido'
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CourseEnrollment {
+  id: string
+  tenant_id: string
+  course_id: string
+  client_id: string
+  status: 'ativo' | 'concluido' | 'cancelado'
+  enrolled_at: string
+  client?: Client
+  course?: Course
 }
 
 /** Dashboard KPIs */

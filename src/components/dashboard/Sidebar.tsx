@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Zap, Calendar, Users, DollarSign, BarChart3, FileText,
   Share2, Globe, Bot, Bell, Settings, X, ChevronRight,
-  ClipboardList, Home, BookOpen, Package
+  ClipboardList, Home, BookOpen, Package, Sparkles, CreditCard
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getNicheConfig } from '@/lib/niche-config'
@@ -63,6 +63,7 @@ function getNavItems(tenant: Tenant): NavItem[] {
     ] : []),
     { href: '/financeiro', label: 'Financeiro', icon: <DollarSign className="w-4 h-4" />, requiredModule: 'financeiro' },
     { href: '/contabilidade', label: 'Contabilidade', icon: <BarChart3 className="w-4 h-4" />, requiredModule: 'contabilidade', badge: 'Pro+' },
+    { href: '/conteudo', label: 'ContentAI', icon: <Sparkles className="w-4 h-4" />, requiredModule: 'content_ai', badge: 'Pro' },
     { href: '/redes-sociais', label: 'Redes Sociais IA', icon: <Share2 className="w-4 h-4" />, requiredModule: 'social', badge: 'Pro' },
     { href: '/site-publico', label: 'Site Público', icon: <Globe className="w-4 h-4" />, requiredModule: 'site', badge: 'Pro' },
     { href: '/ia-contador', label: 'IA Contador', icon: <Bot className="w-4 h-4" />, requiredModule: 'ia_contador', badge: 'Enterprise' },
@@ -156,6 +157,13 @@ export function Sidebar({ tenant, open, onClose }: SidebarProps) {
 
       {/* Bottom actions */}
       <div className="px-3 py-4 border-t border-gray-100 space-y-0.5">
+        <Link
+          href="/assinatura"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-all"
+        >
+          <CreditCard className="w-4 h-4 flex-shrink-0" />
+          Assinatura
+        </Link>
         <Link
           href="/notificacoes"
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-all"
