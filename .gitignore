@@ -37,3 +37,7 @@ next-env.d.ts
 # supabase
 supabase/.branches
 supabase/.temp
+
+# setup secrets — NUNCA commitar
+scripts/setup-secrets.json
+scripts/setup-result.json

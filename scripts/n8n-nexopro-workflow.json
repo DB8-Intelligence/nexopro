@@ -1,0 +1,231 @@
+{
+  "name": "NexoPro — ContentAI: Gerar Pacote de Conteúdo",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nexopro-content",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Receber Job",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'accepted', job_id: $json.body.project_id }) }}",
+        "options": {}
+      },
+      "id": "respond-202",
+      "name": "Resposta 202 Aceito",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [460, 180]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "content_projects",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $json.body.project_id }}" }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "status", "fieldValue": "analyzing" }
+          ]
+        }
+      },
+      "id": "supabase-status-analyzing",
+      "name": "Supabase: Status = analyzing",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 380],
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase NexoPro"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "content_projects",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $('Webhook: Receber Job').item.json.body.project_id }}" }
+          ]
+        }
+      },
+      "id": "supabase-get-project",
+      "name": "Supabase: Buscar projeto",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [680, 380],
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase NexoPro"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const project = $input.item.json\nconst body = $('Webhook: Receber Job').item.json.body\n\nconst niche = body.niche || 'geral'\nconst formato = body.formato || 'post'\nconst tema = project.source_description || project.title || 'conteúdo do negócio'\nconst tenantId = project.tenant_id\n\nconst systemPrompt = `Você é um especialista em marketing digital para o nicho de ${niche}.\nCrie conteúdo altamente engajante e otimizado para conversão.\nResponda APENAS em JSON válido, sem markdown.`\n\nconst userPrompt = `Crie um pacote completo de conteúdo para ${formato} sobre:\n\"${tema}\"\n\nResponda em JSON com exatamente esta estrutura:\n{\n  \"titulo\": \"título chamativo\",\n  \"legenda\": \"legenda completa com emojis (máx 150 palavras)\",\n  \"hashtags\": [\"hashtag1\", \"hashtag2\", ...] (máx 15),\n  \"cta\": \"chamada para ação\",\n  \"scenes\": [\n    { \"id\": 1, \"descricao\": \"descrição da cena\", \"prompt_imagem\": \"prompt detalhado em inglês para gerar a imagem\" },\n    { \"id\": 2, \"descricao\": \"...\", \"prompt_imagem\": \"...\" },\n    { \"id\": 3, \"descricao\": \"...\", \"prompt_imagem\": \"...\" }\n  ],\n  \"roteiro_narracao\": \"texto para narração em áudio (máx 60 segundos)\"\n}`\n\nreturn {\n  tenant_id: tenantId,\n  project_id: project.id,\n  system: systemPrompt,\n  user: userPrompt,\n  model: 'claude-sonnet-4-20250514',\n  max_tokens: 4000\n}"
+      },
+      "id": "code-build-prompt",
+      "name": "Code: Montar Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "={{ $json.model }}" },
+            { "name": "max_tokens", "value": "={{ $json.max_tokens }}" },
+            {
+              "name": "system",
+              "value": "={{ $json.system }}"
+            },
+            {
+              "name": "messages",
+              "value": "={{ JSON.stringify([{ role: 'user', content: $json.user }]) }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "claude-generate",
+      "name": "Claude: Gerar Conteúdo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.item.json\nconst prevData = $('Code: Montar Prompt').item.json\n\nlet content\ntry {\n  const raw = response.content?.[0]?.text || '{}'\n  // Limpar possível markdown\n  const cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim()\n  content = JSON.parse(cleaned)\n} catch(e) {\n  throw new Error('Falha ao parsear resposta Claude: ' + e.message)\n}\n\nreturn {\n  project_id: prevData.project_id,\n  tenant_id: prevData.tenant_id,\n  titulo: content.titulo || '',\n  legenda: content.legenda || '',\n  hashtags: content.hashtags || [],\n  cta: content.cta || '',\n  scenes: content.scenes || [],\n  roteiro_narracao: content.roteiro_narracao || '',\n  analysis: {\n    titulo: content.titulo,\n    cta: content.cta,\n    roteiro: content.roteiro_narracao\n  }\n}"
+      },
+      "id": "code-parse",
+      "name": "Code: Parsear Conteúdo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 380]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "content_projects",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $json.project_id }}" }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "status", "fieldValue": "ready" },
+            { "fieldId": "generated_post_text", "fieldValue": "={{ $json.legenda }}" },
+            { "fieldId": "generated_hashtags", "fieldValue": "={{ JSON.stringify($json.hashtags) }}" },
+            { "fieldId": "generated_scenes", "fieldValue": "={{ JSON.stringify($json.scenes) }}" },
+            { "fieldId": "analysis", "fieldValue": "={{ JSON.stringify($json.analysis) }}" },
+            { "fieldId": "updated_at", "fieldValue": "={{ new Date().toISOString() }}" }
+          ]
+        }
+      },
+      "id": "supabase-save-result",
+      "name": "Supabase: Salvar resultado",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 380],
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase NexoPro"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "content_projects",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $('Webhook: Receber Job').item.json.body.project_id }}" }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "status", "fieldValue": "error" },
+            { "fieldId": "error_message", "fieldValue": "={{ $json.message || 'Erro desconhecido no n8n' }}" },
+            { "fieldId": "updated_at", "fieldValue": "={{ new Date().toISOString() }}" }
+          ]
+        }
+      },
+      "id": "supabase-error",
+      "name": "Supabase: Status = error",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 600],
+      "credentials": {
+        "supabaseApi": {
+          "name": "Supabase NexoPro"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: Receber Job": {
+      "main": [
+        [
+          { "node": "Resposta 202 Aceito", "type": "main", "index": 0 },
+          { "node": "Supabase: Status = analyzing", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Supabase: Status = analyzing": {
+      "main": [[{ "node": "Supabase: Buscar projeto", "type": "main", "index": 0 }]]
+    },
+    "Supabase: Buscar projeto": {
+      "main": [[{ "node": "Code: Montar Prompt", "type": "main", "index": 0 }]]
+    },
+    "Code: Montar Prompt": {
+      "main": [[{ "node": "Claude: Gerar Conteúdo", "type": "main", "index": 0 }]]
+    },
+    "Claude: Gerar Conteúdo": {
+      "main": [[{ "node": "Code: Parsear Conteúdo", "type": "main", "index": 0 }]]
+    },
+    "Code: Parsear Conteúdo": {
+      "main": [[{ "node": "Supabase: Salvar resultado", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": false },
+  "pinData": {},
+  "versionId": "nexopro-v1",
+  "triggerCount": 1,
+  "tags": [{ "name": "nexopro" }]
+}
