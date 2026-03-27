@@ -293,17 +293,21 @@ export const CONTENT_PLAN_LIMITS = {
 
 ## 🗄️ BANCO DE DADOS — TODAS AS TABELAS
 
-### Existentes (migrations 001-003) — EXISTE
+### ✅ PRODUÇÃO — migrations 001-007 aplicadas (pclqjwegljrglaslppag)
 ```
 Core multi-tenant:    tenants · profiles · tenant_settings · tenant_modules
 Operacional:          clients · services · appointments · documents
 Financeiro/Contabil:  contas_bancarias · categorias_financeiras · transactions
                       notas_fiscais · obrigacoes_fiscais · relatorios_contabeis
 Redes Sociais:        social_profiles · social_content · editorial_calendar · media_library
+ContentAI:            content_projects
+Imob:                 properties · property_media · brand_templates
+Estoque/Cursos:       products · courses · course_enrollments
 Sistema:              notifications · activity_logs
+Total: 27 tabelas com RLS ativo
 ```
 
-### A criar — 004_imob_module.sql (Fase 6)
+### A criar — 004_imob_module.sql (Fase 6) ✅ APLICADA
 ```sql
 CREATE TABLE IF NOT EXISTS properties (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
