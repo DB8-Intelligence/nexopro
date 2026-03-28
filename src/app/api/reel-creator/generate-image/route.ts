@@ -11,11 +11,20 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const { prompt, scene } = await req.json() as { prompt: string; scene?: number }
+  const { prompt, scene, characterDna } = await req.json() as {
+    prompt: string
+    scene?: number
+    characterDna?: string
+  }
 
   if (!prompt?.trim()) {
     return NextResponse.json({ error: 'Prompt obrigatório' }, { status: 400 })
   }
+
+  // Prepend character DNA so all scene images share the same character
+  const finalPrompt = characterDna?.trim()
+    ? `${characterDna.trim()}, ${prompt.trim()}`
+    : prompt.trim()
 
   const falKey = process.env.FAL_KEY
   if (!falKey) {
@@ -30,7 +39,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        prompt: prompt.trim(),
+        prompt: finalPrompt,
         image_size: { width: 576, height: 1024 }, // 9:16 vertical
         num_inference_steps: 4,
         num_images: 1,

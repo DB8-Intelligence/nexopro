@@ -32,11 +32,17 @@ function buildPrompt(p: {
   format: string
   duration: number
   talkingObject: boolean
+  characterDna?: string
+  characterObject?: string
 }): string {
   const source = [
     p.url && `URL de referência: ${p.url}`,
     p.description && `Briefing adicional: ${p.description}`,
   ].filter(Boolean).join('\n')
+
+  const characterSection = p.characterDna && p.characterObject
+    ? `\n**Personagem protagonista:** ${p.characterObject} animado em estilo Pixar/Disney 3D\n**DNA visual do personagem (usar como prefixo em TODOS os prompts de imagem):** ${p.characterDna}\nO personagem deve ser o PROTAGONISTA de todas as cenas. Cada prompt AI de imagem deve começar com o DNA acima.`
+    : ''
 
   const toSection = p.talkingObject ? `
 
@@ -60,7 +66,7 @@ Para cada objeto:
 **Formato:** ${FORMAT_LABELS[p.format] ?? p.format}
 **Duração alvo:** ${p.duration}s
 **Tema:** ${p.topic}
-${source}
+${source}${characterSection}
 
 Gere o PACOTE COMPLETO DE PRODUÇÃO. Adapte TODO o conteúdo para o nicho ${p.nichoLabel}: vocabulário, cenários, dores, soluções, exemplos e tom de voz.
 
@@ -125,6 +131,8 @@ export async function POST(req: NextRequest) {
     format: string
     duration: number
     talkingObject: boolean
+    characterDna?: string
+    characterObject?: string
   }
 
   if (!body.topic?.trim()) {
@@ -149,6 +157,8 @@ export async function POST(req: NextRequest) {
     format: body.format ?? 'reel',
     duration: body.duration ?? 30,
     talkingObject: !!body.talkingObject,
+    characterDna: body.characterDna?.trim() || undefined,
+    characterObject: body.characterObject?.trim() || undefined,
   })
 
   const encoder = new TextEncoder()

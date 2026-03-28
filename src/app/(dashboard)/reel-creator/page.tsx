@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Film, Link2, FileText, Sparkles, Copy, Check, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, ImageIcon, Download, Loader2, Zap, Mic, Volume2, Play, Square, Video, Wand2, Clapperboard, BarChart2 } from 'lucide-react'
+import { Film, Link2, FileText, Sparkles, Copy, Check, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, ImageIcon, Download, Loader2, Zap, Mic, Volume2, Play, Square, Video, Wand2, Clapperboard, BarChart2, Upload, Camera, Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 // ─── Types ───────────────────────────────────────────────────
@@ -126,7 +126,11 @@ function parseScenePrompts(output: string): string[] {
 
 interface SceneImg { url: string | null; loading: boolean; error: string | null }
 
-function SceneImagePanel({ output, onImagesUpdate }: { output: string; onImagesUpdate?: (urls: (string | null)[]) => void }) {
+function SceneImagePanel({ output, onImagesUpdate, characterDna }: {
+  output: string
+  onImagesUpdate?: (urls: (string | null)[]) => void
+  characterDna?: string
+}) {
   const prompts = useMemo(() => parseScenePrompts(output), [output])
   const [imgs, setImgs] = useState<SceneImg[]>([])
   const [genAll, setGenAll] = useState(false)
@@ -146,7 +150,7 @@ function SceneImagePanel({ output, onImagesUpdate }: { output: string; onImagesU
       const res = await fetch('/api/reel-creator/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompts[idx], scene: idx + 1 }),
+        body: JSON.stringify({ prompt: prompts[idx], scene: idx + 1, characterDna }),
       })
       const data = await res.json() as { url?: string; error?: string }
       setImgs(prev => prev.map((s, i) =>
@@ -430,12 +434,17 @@ async function blobUrlToDataUri(blobUrl: string): Promise<string> {
   })
 }
 
-function LipSyncPanel({ audioBlobUrl }: { audioBlobUrl: string | null }) {
-  const [imageUrl, setImageUrl] = useState('')
+function LipSyncPanel({ audioBlobUrl, defaultImageUrl }: { audioBlobUrl: string | null; defaultImageUrl?: string }) {
+  const [imageUrl, setImageUrl] = useState(defaultImageUrl ?? '')
   const [predictionId, setPredictionId] = useState<string | null>(null)
   const [status, setStatus] = useState('')
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Sync when character is chosen after panel mounts
+  useEffect(() => {
+    if (defaultImageUrl) setImageUrl(defaultImageUrl)
+  }, [defaultImageUrl])
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)
 
@@ -803,6 +812,246 @@ function VideoAssemblyPanel({
   )
 }
 
+// ─── Photo Object Mode ───────────────────────────────────────
+
+interface CharacterConcept {
+  id: string
+  name: string
+  personality: string
+  colorPalette: string
+  prompt: string
+}
+
+interface CharacterAnalysis {
+  object: string
+  niche: string
+  concepts: CharacterConcept[]
+}
+
+interface GeneratedChar {
+  concept: CharacterConcept
+  url: string | null
+  loading: boolean
+  error: string | null
+}
+
+export interface SelectedCharacter {
+  imageUrl: string
+  dna: string
+  name: string
+  object: string
+}
+
+type PhotoStep = 'upload' | 'analyzing' | 'selecting'
+
+function PhotoObjectMode({
+  niche,
+  onCharacterSelected,
+}: {
+  niche: string
+  onCharacterSelected: (c: SelectedCharacter) => void
+}) {
+  const [step, setStep] = useState<PhotoStep>('upload')
+  const [analysis, setAnalysis] = useState<CharacterAnalysis | null>(null)
+  const [chars, setChars] = useState<GeneratedChar[]>([])
+  const [extracting, setExtracting] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function handleFile(file: File) {
+    if (!file.type.startsWith('image/')) {
+      setError('Envie apenas imagens (JPG, PNG ou WEBP)')
+      return
+    }
+    setStep('analyzing')
+    setError(null)
+
+    // Step 1 — Claude Vision: identify object + 3 concepts
+    const fd = new FormData()
+    fd.append('image', file)
+    if (niche) fd.append('niche', niche)
+
+    try {
+      const res = await fetch('/api/reel-creator/analyze-object', { method: 'POST', body: fd })
+      const data = await res.json() as CharacterAnalysis & { error?: string }
+      if (data.error || !data.concepts?.length) {
+        setError(data.error ?? 'Análise falhou. Tente novamente.')
+        setStep('upload')
+        return
+      }
+
+      setAnalysis(data)
+      setChars(data.concepts.map(c => ({ concept: c, url: null, loading: true, error: null })))
+      setStep('selecting')
+
+      // Step 2 — Fal.ai: generate 3 character images in parallel
+      const res2 = await fetch('/api/reel-creator/generate-characters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompts: data.concepts.map(c => c.prompt) }),
+      })
+      const data2 = await res2.json() as { images: Array<{ url: string | null; error?: string | null }> }
+
+      setChars(data.concepts.map((c, i) => ({
+        concept: c,
+        url: data2.images[i]?.url ?? null,
+        loading: false,
+        error: data2.images[i]?.error ?? null,
+      })))
+    } catch {
+      setError('Falha na análise. Verifique sua conexão.')
+      setStep('upload')
+    }
+  }
+
+  async function pickCharacter(char: GeneratedChar) {
+    if (!char.url || extracting) return
+    setExtracting(char.concept.id)
+
+    try {
+      const res = await fetch('/api/reel-creator/extract-character-dna', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: char.url }),
+      })
+      const data = await res.json() as { dna?: string; error?: string }
+      // Use extracted DNA or fallback to original prompt
+      onCharacterSelected({
+        imageUrl: char.url,
+        dna: data.dna?.trim() || char.concept.prompt,
+        name: char.concept.name,
+        object: analysis?.object ?? char.concept.name,
+      })
+    } catch {
+      onCharacterSelected({
+        imageUrl: char.url,
+        dna: char.concept.prompt,
+        name: char.concept.name,
+        object: analysis?.object ?? char.concept.name,
+      })
+    } finally {
+      setExtracting(null)
+    }
+  }
+
+  if (step === 'upload') return (
+    <div className="space-y-3">
+      <div
+        onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onClick={() => fileRef.current?.click()}
+        className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+          dragOver ? 'border-purple-400 bg-purple-50' : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/30'
+        }`}
+      >
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center">
+            <Camera className="w-7 h-7 text-purple-500" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Envie a foto do seu produto</p>
+            <p className="text-xs text-gray-400 mt-1">JPG, PNG, WEBP — arraste ou clique para selecionar</p>
+          </div>
+          <p className="text-xs text-purple-600 font-medium bg-purple-50 px-3 py-1.5 rounded-full border border-purple-100">
+            ✨ A IA converte em personagem Pixar/Disney 3D
+          </p>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          aria-label="Selecionar imagem do produto"
+          title="Selecionar imagem do produto"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+        />
+      </div>
+      {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+    </div>
+  )
+
+  if (step === 'analyzing') return (
+    <div className="flex flex-col items-center gap-4 py-10">
+      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center">
+        <Sparkles className="w-8 h-8 text-purple-500 animate-pulse" />
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-semibold text-gray-800">Analisando produto...</p>
+        <p className="text-xs text-gray-400 mt-1">Claude Vision identifica o objeto e cria 3 conceitos Pixar/Disney 3D</p>
+      </div>
+    </div>
+  )
+
+  // step === 'selecting'
+  return (
+    <div className="space-y-4">
+      {analysis && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="w-2 h-2 rounded-full bg-purple-500 flex-shrink-0" />
+          <span className="text-gray-500">Objeto identificado:</span>
+          <span className="font-semibold text-gray-800">{analysis.object}</span>
+        </div>
+      )}
+
+      <p className="text-sm font-semibold text-gray-800">
+        Escolha o personagem do seu produto:
+      </p>
+
+      <div className="grid grid-cols-3 gap-3">
+        {chars.map(char => (
+          <div key={char.concept.id} className="flex flex-col gap-2">
+            <div
+              onClick={() => !extracting && char.url && pickCharacter(char)}
+              className={`relative rounded-xl overflow-hidden border-2 aspect-[9/16] transition-all group
+                ${char.url && !extracting ? 'cursor-pointer hover:border-purple-400 hover:shadow-lg' : 'cursor-default'}
+                ${extracting === char.concept.id ? 'border-purple-400' : 'border-transparent'}
+              `}
+            >
+              {char.loading ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-purple-50 to-pink-50">
+                  <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+                  <p className="text-[10px] text-purple-400 font-medium">Gerando...</p>
+                </div>
+              ) : char.url ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={char.url} alt={char.concept.name} className="w-full h-full object-cover" />
+                  {/* Hover overlay */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-purple-900/30 transition-all flex items-end justify-center pb-3">
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white text-purple-700 text-[11px] font-bold px-3 py-1.5 rounded-full shadow">
+                      {extracting === char.concept.id
+                        ? <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Preparando...</span>
+                        : <span className="flex items-center gap-1"><Star className="w-3 h-3" /> Escolher</span>
+                      }
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                  <p className="text-[10px] text-red-400 text-center px-2">{char.error ?? 'Falha'}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Concept info */}
+            <div className="text-center px-0.5">
+              <p className="text-[11px] font-bold text-gray-800 truncate">{char.concept.name}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5 line-clamp-2 leading-tight">{char.concept.personality}</p>
+              <p className="text-[10px] text-purple-500 font-medium mt-0.5">{char.concept.colorPalette}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-xs text-gray-400 text-center">
+        O personagem escolhido será o protagonista de todas as cenas do reel
+      </p>
+    </div>
+  )
+}
+
 // ─── Page ────────────────────────────────────────────────────
 export default function ReelCreatorPage() {
   const supabase = createClient()
@@ -825,6 +1074,10 @@ export default function ReelCreatorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Input mode
+  const [inputMode, setInputMode] = useState<'text' | 'photo'>('text')
+  const [character, setCharacter] = useState<SelectedCharacter | null>(null)
+
   // Form state
   const [topic, setTopic] = useState('')
   const [url, setUrl] = useState('')
@@ -838,7 +1091,15 @@ export default function ReelCreatorPage() {
   const [output, setOutput] = useState('')
   const [done, setDone] = useState(false)
   const [ttsAudioBlobUrl, setTtsAudioBlobUrl] = useState<string | null>(null)
+  const [sceneImageUrls, setSceneImageUrls] = useState<(string | null)[]>([])
   const outputRef = useRef<HTMLDivElement>(null)
+
+  function handleCharacterSelected(c: SelectedCharacter) {
+    setCharacter(c)
+    // Pre-fill topic with object name and force talking object mode
+    setTopic(c.object)
+    setTalkingObject(true)
+  }
 
   const sections = done ? splitSections(output) : []
 
@@ -859,6 +1120,8 @@ export default function ReelCreatorPage() {
           format,
           duration,
           talkingObject,
+          characterDna: character?.dna || undefined,
+          characterObject: character?.object || undefined,
         }),
       })
 
@@ -887,7 +1150,7 @@ export default function ReelCreatorPage() {
     } finally {
       setGenerating(false)
     }
-  }, [topic, url, description, format, duration, talkingObject, generating])
+  }, [topic, url, description, format, duration, talkingObject, generating, character])
 
   const nicheLabel = NICHE_LABELS[niche] ?? niche
 
@@ -924,6 +1187,70 @@ export default function ReelCreatorPage() {
       {/* Form */}
       {!done && (
         <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-4">
+
+          {/* ── Mode selector ── */}
+          <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setInputMode('text')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                inputMode === 'text'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Escrever ideia
+            </button>
+            <button
+              type="button"
+              onClick={() => { setInputMode('photo'); setCharacter(null) }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                inputMode === 'photo'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              Foto do produto
+            </button>
+          </div>
+
+          {/* ── Photo mode: character selection ── */}
+          {inputMode === 'photo' && !character && (
+            <PhotoObjectMode
+              niche={NICHE_LABELS[niche] ?? niche}
+              onCharacterSelected={handleCharacterSelected}
+            />
+          )}
+
+          {/* ── Photo mode: character locked card ── */}
+          {inputMode === 'photo' && character && (
+            <div className="flex items-center gap-3 p-3 bg-purple-50 border border-purple-100 rounded-xl">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={character.imageUrl}
+                alt={character.name}
+                className="w-14 h-16 aspect-[9/16] rounded-lg object-cover border border-purple-200 flex-shrink-0"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-purple-800">{character.name}</p>
+                <p className="text-[11px] text-purple-600 truncate">{character.object}</p>
+                <p className="text-[10px] text-purple-400 mt-0.5">DNA extraído · protagonista de todas as cenas</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCharacter(null)}
+                className="text-[10px] text-purple-400 hover:text-purple-600 flex-shrink-0 underline"
+              >
+                Trocar
+              </button>
+            </div>
+          )}
+
+          {/* ── Text inputs (shown in text mode OR after character selected) ── */}
+          {(inputMode === 'text' || character) && (
+          <>
           {/* Topic */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1052,6 +1379,8 @@ export default function ReelCreatorPage() {
               : <><Sparkles className="w-4 h-4" /> Gerar Pacote Completo</>
             }
           </button>
+          </> // close (inputMode === 'text' || character) fragment
+          )}
         </div>
       )}
 
