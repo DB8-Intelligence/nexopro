@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import type { CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { getDomainConfig, NICHE_COOKIE } from '@/lib/domain-config'
+import { getDomainConfig, isReelCreatorDomain, NICHE_COOKIE, PRODUCT_MODE_COOKIE } from '@/lib/domain-config'
 
 // Routes accessible without authentication
 const PUBLIC_ROUTES = [
@@ -22,6 +22,7 @@ const PUBLIC_ROUTES = [
   '/nutripro',
   '/engepro',
   '/fotopro',
+  '/reelcreator',
 ]
 
 export async function middleware(request: NextRequest) {
@@ -73,7 +74,16 @@ export async function middleware(request: NextRequest) {
     response.cookies.set(NICHE_COOKIE, domainCfg.niche, {
       path: '/',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24 * 7,
+    })
+  }
+
+  // Persist product-mode cookie for ReelCreator standalone dashboard
+  if (isReelCreatorDomain(hostname)) {
+    response.cookies.set(PRODUCT_MODE_COOKIE, 'reelcreator', {
+      path: '/',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7,
     })
   }
 

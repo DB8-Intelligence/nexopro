@@ -15,6 +15,7 @@ interface SidebarProps {
   tenant: Tenant
   open: boolean
   onClose: () => void
+  productMode?: string
 }
 
 interface NavItem {
@@ -72,10 +73,17 @@ function getNavItems(tenant: Tenant): NavItem[] {
   ]
 }
 
-export function Sidebar({ tenant, open, onClose }: SidebarProps) {
+const REELCREATOR_NAV: NavItem[] = [
+  { href: '/reel-creator', label: 'ReelCreator AI',   icon: <Film className="w-4 h-4" />,     requiredModule: 'content_ai' },
+  { href: '/conteudo',     label: 'ContentAI',         icon: <Sparkles className="w-4 h-4" />, requiredModule: 'content_ai' },
+  { href: '/redes-sociais',label: 'Redes Sociais',     icon: <Share2 className="w-4 h-4" />,   requiredModule: 'social',     badge: 'Pro' },
+]
+
+export function Sidebar({ tenant, open, onClose, productMode = 'nexopro' }: SidebarProps) {
   const pathname = usePathname()
   const niche = getNicheConfig(tenant.niche)
-  const navItems = getNavItems(tenant)
+  const isReelCreator = productMode === 'reelcreator'
+  const navItems = isReelCreator ? REELCREATOR_NAV : getNavItems(tenant)
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
@@ -87,17 +95,24 @@ export function Sidebar({ tenant, open, onClose }: SidebarProps) {
           ) : (
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ backgroundColor: niche.primaryColor }}
+              data-color={niche.primaryColor}
+              style={{ backgroundColor: niche.primaryColor }} // dynamic brand color — cannot be a Tailwind class
             >
-              <Zap className="w-4 h-4 text-white" />
+              {isReelCreator ? <Film className="w-4 h-4 text-white" /> : <Zap className="w-4 h-4 text-white" />}
             </div>
           )}
           <div className="min-w-0">
-            <div className="font-bold text-gray-900 text-sm truncate">{tenant.name}</div>
-            <div className="text-xs text-gray-400 truncate">{niche.brandName}</div>
+            <div className="font-bold text-gray-900 text-sm truncate">
+              {isReelCreator ? 'ReelCreator AI' : tenant.name}
+            </div>
+            <div className="text-xs text-gray-400 truncate">
+              {isReelCreator ? 'by NexoPro' : niche.brandName}
+            </div>
           </div>
         </Link>
         <button
+          type="button"
+          aria-label="Fechar menu"
           onClick={onClose}
           className="lg:hidden p-1 rounded-lg hover:bg-gray-100 text-gray-400"
         >

@@ -10,13 +10,23 @@ export interface DomainConfig {
 
 /** Maps hostname (without port) to a domain config */
 export const DOMAIN_MAP: Record<string, DomainConfig> = {
-  'imobpro.app':       { niche: 'imoveis',    landingPath: '/imobpro',    productName: 'iMobPro' },
-  'salaopro.app':      { niche: 'beleza',      landingPath: '/salaopro',   productName: 'Salão Pro' },
-  'reelcreator.app':   { niche: 'fotografia',  landingPath: '/fotopro',    productName: 'ReelCreator' },
+  'imobpro.app':           { niche: 'imoveis',    landingPath: '/imobpro',       productName: 'iMobPro' },
+  'salaopro.app':          { niche: 'beleza',      landingPath: '/salaopro',      productName: 'Salão Pro' },
+  'reelcreator.app':       { niche: 'fotografia',  landingPath: '/reelcreator',   productName: 'ReelCreator AI' },
   // Preview / staging aliases
-  'www.imobpro.app':   { niche: 'imoveis',    landingPath: '/imobpro',    productName: 'iMobPro' },
-  'www.salaopro.app':  { niche: 'beleza',      landingPath: '/salaopro',   productName: 'Salão Pro' },
+  'www.imobpro.app':       { niche: 'imoveis',    landingPath: '/imobpro',       productName: 'iMobPro' },
+  'www.salaopro.app':      { niche: 'beleza',      landingPath: '/salaopro',      productName: 'Salão Pro' },
+  'www.reelcreator.app':   { niche: 'fotografia',  landingPath: '/reelcreator',   productName: 'ReelCreator AI' },
 }
+
+/** Returns true if the hostname is the ReelCreator standalone product */
+export function isReelCreatorDomain(hostname: string): boolean {
+  const host = hostname.split(':')[0]
+  return host === 'reelcreator.app' || host === 'www.reelcreator.app'
+}
+
+/** Cookie name used to signal the ReelCreator standalone mode in the dashboard */
+export const PRODUCT_MODE_COOKIE = 'x-nexopro-product-mode'
 
 /** Returns config for a given hostname, or null for the default nexopro.app domain */
 export function getDomainConfig(hostname: string): DomainConfig | null {

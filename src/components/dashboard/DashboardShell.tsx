@@ -8,10 +8,11 @@ import type { Tenant, Profile } from '@/types/database'
 interface DashboardShellProps {
   tenant: Tenant
   profile: Profile
+  productMode?: string
   children: React.ReactNode
 }
 
-export function DashboardShell({ tenant, profile, children }: DashboardShellProps) {
+export function DashboardShell({ tenant, profile, productMode = 'nexopro', children }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Aplica o nicho como data attribute no html para trocar as CSS vars
@@ -29,6 +30,7 @@ export function DashboardShell({ tenant, profile, children }: DashboardShellProp
         tenant={tenant}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        productMode={productMode}
       />
 
       {/* Main content */}
