@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Film, Link2, FileText, Sparkles, Copy, Check, RefreshCw, ToggleLeft, ToggleRight, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { Film, Link2, FileText, Sparkles, Copy, Check, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, ImageIcon, Download, Loader2, Zap } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 // ─── Types ───────────────────────────────────────────────────
@@ -105,6 +105,142 @@ function SectionCard({ title, body }: { title: string; body: string }) {
           <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{body}</pre>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Scene image panel ───────────────────────────────────────
+
+function parseScenePrompts(output: string): string[] {
+  const startIdx = output.indexOf('## 🎬 ROTEIRO DE CENAS')
+  if (startIdx === -1) return []
+  const nextSection = output.indexOf('\n## ', startIdx + 10)
+  const block = nextSection > -1 ? output.slice(startIdx, nextSection) : output.slice(startIdx)
+  // Extract text between backtick-quoted strings: `"..."`
+  const results: string[] = []
+  const re = /`"([^`]{20,})"`/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(block)) !== null) results.push(m[1].trim())
+  return results
+}
+
+interface SceneImg { url: string | null; loading: boolean; error: string | null }
+
+function SceneImagePanel({ output }: { output: string }) {
+  const prompts = useMemo(() => parseScenePrompts(output), [output])
+  const [imgs, setImgs] = useState<SceneImg[]>([])
+  const [genAll, setGenAll] = useState(false)
+
+  useEffect(() => {
+    setImgs(prompts.map(() => ({ url: null, loading: false, error: null })))
+  }, [prompts])
+
+  async function generateOne(idx: number) {
+    setImgs(prev => prev.map((s, i) => i === idx ? { ...s, loading: true, error: null } : s))
+    try {
+      const res = await fetch('/api/reel-creator/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompts[idx], scene: idx + 1 }),
+      })
+      const data = await res.json() as { url?: string; error?: string }
+      setImgs(prev => prev.map((s, i) =>
+        i === idx ? { url: data.url ?? null, loading: false, error: data.error ?? null } : s
+      ))
+    } catch {
+      setImgs(prev => prev.map((s, i) =>
+        i === idx ? { ...s, loading: false, error: 'Falha na conexão' } : s
+      ))
+    }
+  }
+
+  async function generateAll() {
+    setGenAll(true)
+    for (let i = 0; i < prompts.length; i++) {
+      if (!imgs[i]?.url) await generateOne(i)
+    }
+    setGenAll(false)
+  }
+
+  if (prompts.length === 0) return null
+
+  const allDone = imgs.length > 0 && imgs.every(s => s.url)
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+        <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+          <ImageIcon className="w-4 h-4 text-gray-400" />
+          🖼️ Imagens das Cenas
+          <span className="text-xs font-normal text-gray-400">
+            ({imgs.filter(s => s.url).length}/{prompts.length} geradas · ~$0.003/img)
+          </span>
+        </p>
+        <button
+          type="button"
+          onClick={generateAll}
+          disabled={genAll || allDone}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {genAll
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando...</>
+            : <><Zap className="w-3.5 h-3.5" /> Gerar Todas</>
+          }
+        </button>
+      </div>
+
+      <div className="p-4 grid grid-cols-3 sm:grid-cols-5 gap-3">
+        {prompts.map((_, idx) => {
+          const img = imgs[idx]
+          return (
+            <div key={idx} className="flex flex-col gap-1.5">
+              {/* 9:16 frame */}
+              <div className="relative rounded-xl overflow-hidden bg-gray-100 border border-gray-200 aspect-[9/16]">
+                {img?.url ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.url}
+                      alt={`Cena ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <a
+                      href={img.url}
+                      download={`cena-${idx + 1}.jpg`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="absolute bottom-1.5 right-1.5 p-1 bg-black/60 rounded-lg hover:bg-black/80 transition-colors"
+                      title="Download"
+                    >
+                      <Download className="w-3 h-3 text-white" />
+                    </a>
+                  </>
+                ) : img?.loading ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                    <p className="text-[10px] text-gray-400">Gerando...</p>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => generateOne(idx)}
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-2 hover:bg-gray-200 transition-colors"
+                  >
+                    <Sparkles className="w-5 h-5 text-gray-400" />
+                    <p className="text-[10px] text-gray-500">Gerar</p>
+                  </button>
+                )}
+                {img?.error && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-red-50">
+                    <p className="text-[9px] text-red-500 text-center px-2">{img.error}</p>
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] text-center text-gray-400 font-medium">Cena {idx + 1}</p>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -381,6 +517,7 @@ export default function ReelCreatorPage() {
             <p className="text-sm font-semibold text-gray-700">Pacote gerado ✓</p>
             <CopyBtn text={output} />
           </div>
+          <SceneImagePanel output={output} />
           {sections.map(s => (
             <SectionCard key={s.title} title={s.title} body={s.body} />
           ))}
