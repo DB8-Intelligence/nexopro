@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Film, Link2, FileText, Sparkles, Copy, Check, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, ImageIcon, Download, Loader2, Zap } from 'lucide-react'
+import { Film, Link2, FileText, Sparkles, Copy, Check, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, ImageIcon, Download, Loader2, Zap, Mic, Volume2, Play, Square } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 // ─── Types ───────────────────────────────────────────────────
@@ -240,6 +240,165 @@ function SceneImagePanel({ output }: { output: string }) {
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Voice panel ─────────────────────────────────────────────
+
+type TTSVoice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'
+
+const TTS_VOICES: { id: TTSVoice; label: string; icon: string }[] = [
+  { id: 'nova',    label: 'Nova',    icon: '👩' },
+  { id: 'shimmer', label: 'Shimmer', icon: '✨' },
+  { id: 'alloy',   label: 'Alloy',   icon: '🤖' },
+  { id: 'echo',    label: 'Echo',    icon: '👨' },
+  { id: 'onyx',    label: 'Onyx',    icon: '🎙️' },
+  { id: 'fable',   label: 'Fable',   icon: '📖' },
+]
+
+function parseVoiceScript(output: string): string {
+  const startIdx = output.indexOf('## 🎙️ ROTEIRO DE VOZ')
+  if (startIdx === -1) return ''
+  const nextSection = output.indexOf('\n## ', startIdx + 10)
+  const block = nextSection > -1 ? output.slice(startIdx, nextSection) : output.slice(startIdx)
+  // Strip markdown symbols to get clean TTS text
+  return block
+    .replace(/## 🎙️ ROTEIRO DE VOZ\n?/, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\[pausa longa\]/gi, '...')
+    .replace(/\[pausa\]/gi, '.')
+    .replace(/\[ÊNFASE\]/gi, '')
+    .replace(/^#+\s*/gm, '')
+    .trim()
+}
+
+function VoicePanel({ output }: { output: string }) {
+  const script = useMemo(() => parseVoiceScript(output), [output])
+  const [voice, setVoice] = useState<TTSVoice>('nova')
+  const [loading, setLoading] = useState(false)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  async function generate() {
+    setLoading(true)
+    setError(null)
+    setAudioUrl(null)
+    try {
+      const res = await fetch('/api/reel-creator/generate-voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script, voice }),
+      })
+      if (!res.ok) {
+        const d = await res.json() as { error?: string }
+        setError(d.error ?? 'Erro na geração')
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      setAudioUrl(url)
+    } catch {
+      setError('Falha na conexão')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function togglePlay() {
+    const audio = audioRef.current
+    if (!audio) return
+    if (playing) { audio.pause(); setPlaying(false) }
+    else { audio.play(); setPlaying(true) }
+  }
+
+  if (!script) return null
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+        <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+          <Mic className="w-4 h-4 text-gray-400" />
+          🎙️ Narração em Voz
+          <span className="text-xs font-normal text-gray-400">(~$0.008 · OpenAI TTS)</span>
+        </p>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {/* Voice selector */}
+        <div>
+          <p className="text-xs text-gray-500 mb-1.5">Voz</p>
+          <div className="flex flex-wrap gap-2">
+            {TTS_VOICES.map(v => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => { setVoice(v.id); setAudioUrl(null) }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border transition-colors ${
+                  voice === v.id
+                    ? 'bg-purple-50 border-purple-300 text-purple-700 font-medium'
+                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {v.icon} {v.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Script preview */}
+        <div className="bg-gray-50 rounded-xl p-3 max-h-32 overflow-y-auto">
+          <p className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap">{script.slice(0, 400)}{script.length > 400 ? '…' : ''}</p>
+        </div>
+
+        {/* Generate button */}
+        <button
+          type="button"
+          onClick={generate}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-xs font-semibold rounded-xl hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando narração...</>
+            : <><Volume2 className="w-3.5 h-3.5" /> Gerar Narração</>
+          }
+        </button>
+
+        {error && <p className="text-xs text-red-500">{error}</p>}
+
+        {/* Audio player */}
+        {audioUrl && (
+          <div className="flex items-center gap-3 bg-purple-50 border border-purple-100 rounded-xl p-3">
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <audio
+              ref={audioRef}
+              src={audioUrl}
+              onEnded={() => setPlaying(false)}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="flex items-center justify-center w-8 h-8 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors flex-shrink-0"
+            >
+              {playing ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+            </button>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-purple-800">Narração gerada · Voz: {voice}</p>
+              <p className="text-[10px] text-purple-500 mt-0.5">Clique no play para ouvir</p>
+            </div>
+            <a
+              href={audioUrl}
+              download="narration.mp3"
+              className="flex items-center gap-1 px-2.5 py-1 bg-white border border-purple-200 text-purple-700 text-xs rounded-lg hover:bg-purple-50 transition-colors"
+            >
+              <Download className="w-3 h-3" /> MP3
+            </a>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -518,6 +677,7 @@ export default function ReelCreatorPage() {
             <CopyBtn text={output} />
           </div>
           <SceneImagePanel output={output} />
+          <VoicePanel output={output} />
           {sections.map(s => (
             <SectionCard key={s.title} title={s.title} body={s.body} />
           ))}
