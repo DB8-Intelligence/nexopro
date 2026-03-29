@@ -113,7 +113,7 @@ const FEATURES = [
   { icon: '⚡', title: 'Streaming em Tempo Real', desc: 'Veja o roteiro sendo gerado palavra por palavra. Sem tela de loading — resultados imediatos, edite enquanto a IA escreve.' },
   { icon: '📋', title: 'Pacote Completo', desc: 'Roteiro de cenas, script de voz, legendas em tela, texto do post, 25 hashtags segmentadas e 3 opções de CTA — tudo de uma vez.' },
   { icon: '💰', title: 'Custo Ultra-Baixo', desc: 'Menos de R$0,50 por pacote completo. Imagens a R$0,015, narração a R$0,04, lip-sync a R$0,075. Repasse para clientes com margem de 20x.' },
-  { icon: '🔌', title: 'Integrado ao NexoPro', desc: 'Funciona standalone ou como módulo do NexoPro — o mesmo pacote completo disponível para todos os nichos do ecossistema.' },
+  { icon: '🔌', title: 'Integrado ao NexoOmnix', desc: 'Funciona standalone ou como módulo do NexoOmnix — o mesmo pacote completo disponível para todos os nichos do ecossistema.' },
 ]
 
 const FAQS = [
@@ -426,7 +426,7 @@ export default function ReelCreatorLanding() {
               🎬
             </div>
             <span className="text-sm font-semibold">ReelCreator AI</span>
-            <span className="text-gray-600 text-xs ml-2">by NexoPro · DB8 Intelligence</span>
+            <span className="text-gray-600 text-xs ml-2">by NexoOmnix · DB8 Intelligence</span>
           </div>
           <div className="flex items-center gap-6 text-xs text-gray-600">
             <Link href="/login" className="hover:text-gray-400 transition-colors">Entrar</Link>

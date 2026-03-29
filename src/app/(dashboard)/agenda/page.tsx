@@ -2,7 +2,7 @@ import { AgendaView } from '@/components/agenda/AgendaView'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Agenda — NexoPro',
+  title: 'Agenda — NexoOmnix',
 }
 
 export default function AgendaPage() {

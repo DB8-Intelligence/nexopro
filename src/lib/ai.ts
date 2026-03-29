@@ -1,5 +1,5 @@
 // ============================================================
-// NexoPro — Cliente Anthropic para o Agente IA Contador
+// NexoOmnix — Cliente Anthropic para o Agente IA Contador
 // Usar APENAS em API Routes (server-side)
 // NUNCA importar em componentes client-side
 // ============================================================
@@ -32,7 +32,7 @@ export function buildContadorSystemPrompt(ctx: ContadorContext): string {
 
 Contexto do negócio:
 - Negócio: ${ctx.tenantName} (${ctx.niche})
-- Plano NexoPro: ${ctx.plan}
+- Plano NexoOmnix: ${ctx.plan}
 - Faturamento do mês atual: R$ ${ctx.revenueThisMonth.toFixed(2)}
 - Despesas do mês atual: R$ ${ctx.expensesThisMonth.toFixed(2)}
 - Lucro do mês atual: R$ ${ctx.profitThisMonth.toFixed(2)}

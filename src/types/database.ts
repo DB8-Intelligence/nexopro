@@ -1,5 +1,5 @@
 // ============================================================
-// NexoPro — TypeScript Types
+// NexoOmnix — TypeScript Types
 // Auto-sincronizados com o schema Supabase
 // Rodar: npx supabase gen types typescript --local > src/types/database.ts
 // ============================================================

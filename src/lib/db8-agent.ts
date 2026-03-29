@@ -1,5 +1,5 @@
 /**
- * NexoPro ↔ db8-agent HTTP Client
+ * NexoOmnix ↔ db8-agent HTTP Client
  * ==================================
  * Proxy para a API Railway em api.db8intelligence.com.br
  * Todos os endpoints recebem tenant_id para isolamento multi-tenant.

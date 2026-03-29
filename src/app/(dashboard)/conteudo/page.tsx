@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { ContentWizard } from '@/components/content-ai/ContentWizard'
 
 export const metadata: Metadata = {
-  title: 'ContentAI | NexoPro',
+  title: 'ContentAI | NexoOmnix',
   description: 'Crie conteúdo viral para redes sociais com inteligência artificial',
 }
 

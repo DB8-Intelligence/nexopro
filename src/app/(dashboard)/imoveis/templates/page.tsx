@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { TemplateGallery } from '@/components/imoveis/TemplateGallery'
 
 export const metadata: Metadata = {
-  title: 'Templates | NexoPro',
+  title: 'Templates | NexoOmnix',
   description: 'Modelos de vídeo para imóveis',
 }
 

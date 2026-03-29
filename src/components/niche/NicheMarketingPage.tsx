@@ -31,7 +31,7 @@ const COMPETITOR_FEATURES = [
   'Financeiro básico ✓',
 ]
 
-const NEXOPRO_EXTRA_FEATURES = [
+const NEXOOMNIX_EXTRA_FEATURES = [
   'DRE automático',
   'Fluxo de caixa real',
   'Notas fiscais (NFS-e)',
@@ -146,7 +146,7 @@ export function NicheMarketingPage({
         </div>
       </section>
 
-      {/* Comparison: competitor vs NexoPro */}
+      {/* Comparison: competitor vs NexoOmnix */}
       <section className="py-20 px-4 bg-gray-50">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
@@ -171,7 +171,7 @@ export function NicheMarketingPage({
               </ul>
             </div>
 
-            {/* NexoPro */}
+            {/* NexoOmnix */}
             <div
               className="rounded-2xl border-2 p-6"
               style={{ borderColor: niche.primaryColor, background: `${niche.primaryColor}08` }}
@@ -189,7 +189,7 @@ export function NicheMarketingPage({
                     {f}
                   </li>
                 ))}
-                {NEXOPRO_EXTRA_FEATURES.map(f => (
+                {NEXOOMNIX_EXTRA_FEATURES.map(f => (
                   <li key={f} className="flex items-center gap-2.5 text-gray-900 font-medium">
                     <Check className="w-4 h-4" style={{ color: niche.primaryColor }} />
                     + {f}
@@ -357,7 +357,7 @@ export function NicheMarketingPage({
               <Zap className="w-3.5 h-3.5 text-white" />
             </div>
             <span className="font-bold text-gray-900 text-sm">{niche.brandName}</span>
-            <span className="text-gray-400 text-xs ml-2">powered by NexoPro</span>
+            <span className="text-gray-400 text-xs ml-2">powered by NexoOmnix</span>
           </div>
           <div className="flex items-center gap-4 text-xs text-gray-400">
             <a href="/privacidade" className="hover:text-gray-600">Privacidade</a>
