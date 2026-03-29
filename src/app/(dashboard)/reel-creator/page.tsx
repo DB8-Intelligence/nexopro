@@ -8,6 +8,8 @@ import { PersonaSelector } from '@/components/content-ai/PersonaSelector'
 import { CONTENT_PERSONAS } from '@/lib/content-ai/content-personas'
 import type { PersonaId } from '@/lib/content-ai/content-personas'
 import { AutoPostModal } from '@/components/content-ai/AutoPostModal'
+import { getTalkingObjectsForNiche } from '@/lib/content-ai/talking-objects'
+import type { TalkingObject } from '@/lib/content-ai/talking-objects'
 
 // ─── Types ───────────────────────────────────────────────────
 type Format = 'reel' | 'carrossel' | 'story' | 'post'
@@ -27,11 +29,14 @@ const NICHE_LABELS: Record<string, string> = {
   saude:      'Saúde / Clínica',
   juridico:   'Advocacia',
   imoveis:    'Imóveis',
-  pet:        'Pet / Veterinária',
-  educacao:   'Escola / Cursos',
-  nutricao:   'Nutrição',
-  engenharia: 'Engenharia',
-  fotografia: 'Fotografia',
+  pet:         'Pet / Veterinária',
+  educacao:    'Escola / Cursos',
+  nutricao:    'Nutrição',
+  engenharia:  'Engenharia',
+  fotografia:  'Fotografia',
+  gastronomia: 'Gastronomia',
+  fitness:     'Fitness / Academia',
+  financas:    'Contabilidade / Finanças',
 }
 
 // Section headings to split output into copyable cards
@@ -1113,6 +1118,7 @@ export default function ReelCreatorPage() {
   const [format, setFormat] = useState<Format>('reel')
   const [duration, setDuration] = useState(30)
   const [talkingObject, setTalkingObject] = useState(false)
+  const [selectedTalkingObject, setSelectedTalkingObject] = useState<TalkingObject | null>(null)
 
   // Generation state
   const [generating, setGenerating] = useState(false)
@@ -1164,6 +1170,9 @@ export default function ReelCreatorPage() {
           format,
           duration,
           talkingObject,
+          talkingObjectName: selectedTalkingObject?.name || undefined,
+          talkingObjectGancho: selectedTalkingObject?.gancho || undefined,
+          talkingObjectPersonalidade: selectedTalkingObject?.personalidade || undefined,
           characterDna: character?.dna || undefined,
           characterObject: character?.object || undefined,
           personaId: personaId || undefined,
@@ -1195,7 +1204,7 @@ export default function ReelCreatorPage() {
     } finally {
       setGenerating(false)
     }
-  }, [topic, url, description, format, duration, talkingObject, generating, character, personaId])
+  }, [topic, url, description, format, duration, talkingObject, selectedTalkingObject, generating, character, personaId])
 
   const nicheLabel = NICHE_LABELS[niche] ?? niche
 
@@ -1433,25 +1442,78 @@ export default function ReelCreatorPage() {
             </div>
           </div>
 
-          {/* Talking Object toggle */}
-          <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-100 rounded-xl">
-            <div>
-              <p className="text-sm font-medium text-gray-800">🎭 Objeto Falante Viral</p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Gerar 5 opções de objetos animados com prompts AI e scripts
-              </p>
+          {/* Talking Object toggle + selector */}
+          <div className={`border rounded-xl overflow-hidden transition-colors ${talkingObject ? 'border-purple-300 bg-gradient-to-r from-purple-50 to-pink-50' : 'border-gray-200 bg-gray-50'}`}>
+            {/* Toggle row */}
+            <div className="flex items-center justify-between p-3.5">
+              <div>
+                <p className="text-sm font-medium text-gray-800">🎭 Objeto Falante Viral</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {talkingObject && selectedTalkingObject
+                    ? <span className="text-purple-600 font-medium">{selectedTalkingObject.emoji} {selectedTalkingObject.name} selecionado</span>
+                    : 'Escolha um objeto animado para narrar o reel'
+                  }
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !talkingObject
+                  setTalkingObject(next)
+                  if (!next) setSelectedTalkingObject(null)
+                }}
+                className="flex-shrink-0"
+              >
+                {talkingObject
+                  ? <ToggleRight className="w-8 h-8 text-purple-600" />
+                  : <ToggleLeft className="w-8 h-8 text-gray-300" />
+                }
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setTalkingObject(t => !t)}
-              className="flex-shrink-0"
-            >
-              {talkingObject
-                ? <ToggleRight className="w-8 h-8 text-purple-600" />
-                : <ToggleLeft className="w-8 h-8 text-gray-300" />
-              }
-            </button>
-          </div>
+
+            {/* Object picker — shown when toggle ON */}
+            {talkingObject && (() => {
+              const objects = getTalkingObjectsForNiche(niche)
+              return (
+                <div className="px-3.5 pb-3.5 space-y-2">
+                  <p className="text-xs text-purple-700 font-medium">Escolha o personagem (ou deixe em branco para o Claude sugerir 5 opções):</p>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {objects.map(obj => (
+                      <button
+                        key={obj.id}
+                        type="button"
+                        onClick={() => setSelectedTalkingObject(
+                          selectedTalkingObject?.id === obj.id ? null : obj
+                        )}
+                        className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-colors ${
+                          selectedTalkingObject?.id === obj.id
+                            ? 'border-purple-400 bg-purple-100'
+                            : 'border-gray-200 bg-white hover:border-purple-200'
+                        }`}
+                      >
+                        <span className="text-xl flex-shrink-0 mt-0.5">{obj.emoji}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-semibold text-gray-800">{obj.name}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600">
+                              {obj.personalidade}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 italic mt-0.5 line-clamp-1">
+                            &ldquo;{obj.gancho}&rdquo;
+                          </p>
+                        </div>
+                        {selectedTalkingObject?.id === obj.id && (
+                          <div className="w-4 h-4 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0 mt-1">
+                            <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}</div>
 
           {/* Generate button */}
           <button
