@@ -46,14 +46,14 @@ export async function POST(req: NextRequest) {
 
   const { prompts } = await req.json() as { prompts: string[] }
 
-  if (!prompts?.length || prompts.length > 3) {
-    return NextResponse.json({ error: 'Envie 1–3 prompts.' }, { status: 400 })
+  if (!prompts?.length || prompts.length > 6) {
+    return NextResponse.json({ error: 'Envie 1–6 prompts.' }, { status: 400 })
   }
 
   const falKey = process.env.FAL_KEY
   if (!falKey) return NextResponse.json({ error: 'FAL_KEY não configurada' }, { status: 500 })
 
-  // Generate all 3 in parallel
+  // Generate all in parallel
   const images = await Promise.all(prompts.map(p => generateOne(p, falKey)))
 
   return NextResponse.json({ images })

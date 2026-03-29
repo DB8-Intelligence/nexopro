@@ -41,7 +41,7 @@ export interface NicheModule {
   label: string
   icon: string
   available: boolean
-  plans: ('starter' | 'pro' | 'pro_plus' | 'enterprise')[]
+  plans: ('starter' | 'pro' | 'pro_plus' | 'pro_max' | 'enterprise')[]
 }
 
 export interface NicheTerms {
@@ -455,11 +455,20 @@ export const PLANS = [
     highlight: true,
   },
   {
+    id: 'pro_max' as const,
+    name: 'PRO MAX',
+    price: 499,
+    description: 'Com publicação automática no Instagram',
+    badge: '🚀 NOVO',
+    features: ['Tudo do Pro Plus', 'Instagram Viral Engine IA', 'Auto-post Instagram & Facebook', 'Agendamento de posts', 'Análise de engajamento avançada'],
+    highlight: false,
+  },
+  {
     id: 'enterprise' as const,
     name: 'Enterprise',
     price: 699,
     description: 'Com Contador IA dedicado',
-    features: ['Tudo do Pro Plus', 'Agente IA Contador 24h', 'Open Finance', 'Relatório contábil PDF', 'Suporte prioritário'],
+    features: ['Tudo do PRO MAX', 'Agente IA Contador 24h', 'Open Finance', 'Relatório contábil PDF', 'Suporte prioritário'],
     highlight: false,
   },
 ]
@@ -470,9 +479,9 @@ export function getNicheConfig(slug: string): NicheConfig {
 
 export function getNicheModulesForPlan(
   niche: NicheSlug,
-  plan: 'starter' | 'pro' | 'pro_plus' | 'enterprise'
+  plan: 'starter' | 'pro' | 'pro_plus' | 'pro_max' | 'enterprise'
 ): NicheModule[] {
-  const planOrder = ['starter', 'pro', 'pro_plus', 'enterprise']
+  const planOrder = ['starter', 'pro', 'pro_plus', 'pro_max', 'enterprise']
   const planIndex = planOrder.indexOf(plan)
 
   return NICHE_CONFIGS[niche].modules.filter((module) =>

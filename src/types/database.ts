@@ -16,7 +16,7 @@ export type NicheType =
   | 'engenharia'
   | 'fotografia'
 
-export type PlanType = 'trial' | 'starter' | 'pro' | 'pro_plus' | 'enterprise'
+export type PlanType = 'trial' | 'starter' | 'pro' | 'pro_plus' | 'pro_max' | 'enterprise'
 
 export type AppointmentStatus =
   | 'agendado'

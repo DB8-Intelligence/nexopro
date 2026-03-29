@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { CONTENT_PERSONAS } from '@/lib/content-ai/content-personas'
+import type { PersonaId } from '@/lib/content-ai/content-personas'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -34,11 +36,17 @@ function buildPrompt(p: {
   talkingObject: boolean
   characterDna?: string
   characterObject?: string
+  personaId?: PersonaId
 }): string {
   const source = [
     p.url && `URL de referência: ${p.url}`,
     p.description && `Briefing adicional: ${p.description}`,
   ].filter(Boolean).join('\n')
+
+  const persona = p.personaId ? CONTENT_PERSONAS[p.personaId] : null
+  const personaSection = persona
+    ? `\n**Persona de Conteúdo:** ${persona.emoji} ${persona.name} — ${persona.tagline}\n**Tom de voz:** ${persona.contentTone}\n**Fórmula de roteiro:** ${persona.scriptFormula}\n**Pilares de conteúdo:** ${persona.contentPillars.join(' • ')}\n**Ganchos de legenda sugeridos:** ${persona.captionHooks.join(' | ')}`
+    : ''
 
   const characterSection = p.characterDna && p.characterObject
     ? `\n**Personagem protagonista:** ${p.characterObject} animado em estilo Pixar/Disney 3D\n**DNA visual do personagem (usar como prefixo em TODOS os prompts de imagem):** ${p.characterDna}\nO personagem deve ser o PROTAGONISTA de todas as cenas. Cada prompt AI de imagem deve começar com o DNA acima.`
@@ -66,9 +74,9 @@ Para cada objeto:
 **Formato:** ${FORMAT_LABELS[p.format] ?? p.format}
 **Duração alvo:** ${p.duration}s
 **Tema:** ${p.topic}
-${source}${characterSection}
+${source}${characterSection}${personaSection}
 
-Gere o PACOTE COMPLETO DE PRODUÇÃO. Adapte TODO o conteúdo para o nicho ${p.nichoLabel}: vocabulário, cenários, dores, soluções, exemplos e tom de voz.
+Gere o PACOTE COMPLETO DE PRODUÇÃO. Adapte TODO o conteúdo para o nicho ${p.nichoLabel}: vocabulário, cenários, dores, soluções, exemplos e tom de voz.${persona ? ` Siga rigorosamente a persona "${persona.name}": tom ${persona.contentTone}, fórmula de roteiro e pilares de conteúdo fornecidos acima.` : ''}
 
 ---
 
@@ -133,6 +141,7 @@ export async function POST(req: NextRequest) {
     talkingObject: boolean
     characterDna?: string
     characterObject?: string
+    personaId?: PersonaId
   }
 
   if (!body.topic?.trim()) {
@@ -159,6 +168,7 @@ export async function POST(req: NextRequest) {
     talkingObject: !!body.talkingObject,
     characterDna: body.characterDna?.trim() || undefined,
     characterObject: body.characterObject?.trim() || undefined,
+    personaId: body.personaId || undefined,
   })
 
   const encoder = new TextEncoder()

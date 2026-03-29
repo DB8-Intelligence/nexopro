@@ -13,6 +13,7 @@ const PLAN_LABELS: Record<PlanType, string> = {
   starter: 'Starter',
   pro: 'Pro',
   pro_plus: 'Pro Plus',
+  pro_max: 'PRO MAX',
   enterprise: 'Enterprise',
 }
 
@@ -21,6 +22,7 @@ const PLAN_COLORS: Record<PlanType, string> = {
   starter:    'bg-blue-50 text-blue-700',
   pro:        'bg-purple-50 text-purple-700',
   pro_plus:   'bg-orange-50 text-orange-700',
+  pro_max:    'bg-gradient-to-r from-purple-600 to-pink-600 text-white',
   enterprise: 'bg-teal-50 text-teal-700',
 }
 

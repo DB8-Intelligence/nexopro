@@ -22,13 +22,15 @@ export const PLAN_PRICE_IDS: Record<string, string | undefined> = {
   starter:    process.env.STRIPE_PRICE_STARTER,
   pro:        process.env.STRIPE_PRICE_PRO,
   pro_plus:   process.env.STRIPE_PRICE_PRO_PLUS,
+  pro_max:    process.env.STRIPE_PRICE_PRO_MAX,
   enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
 }
 
 export const PLAN_LABELS: Record<string, string> = {
   starter:    'Starter — R$ 99/mês',
   pro:        'Pro — R$ 199/mês',
-  pro_plus:   'Pro Plus — R$ 349/mês',
+  pro_plus:   'Pro Plus — R$ 399/mês',
+  pro_max:    'PRO MAX — R$ 499/mês',
   enterprise: 'Enterprise — R$ 699/mês',
 }
 

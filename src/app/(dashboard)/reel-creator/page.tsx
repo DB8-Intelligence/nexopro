@@ -1,8 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Film, Link2, FileText, Sparkles, Copy, Check, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, ImageIcon, Download, Loader2, Zap, Mic, Volume2, Play, Square, Video, Wand2, Clapperboard, BarChart2, Upload, Camera, Star } from 'lucide-react'
+import { Film, Link2, FileText, Sparkles, Copy, Check, RefreshCw, ToggleLeft, ToggleRight, ChevronDown, ImageIcon, Download, Loader2, Zap, Mic, Volume2, Play, Square, Video, Wand2, Clapperboard, BarChart2, Upload, Camera, Star, Wand, Send } from 'lucide-react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { PersonaSelector } from '@/components/content-ai/PersonaSelector'
+import { CONTENT_PERSONAS } from '@/lib/content-ai/content-personas'
+import type { PersonaId } from '@/lib/content-ai/content-personas'
+import { AutoPostModal } from '@/components/content-ai/AutoPostModal'
 
 // ─── Types ───────────────────────────────────────────────────
 type Format = 'reel' | 'carrossel' | 'story' | 'post'
@@ -817,7 +822,7 @@ function VideoAssemblyPanel({
 interface CharacterConcept {
   id: string
   name: string
-  style?: 'fotorrealista' | 'miniatura-acao' | 'pixar-3d'
+  style?: 'fotorrealista' | 'miniatura-acao' | 'pixar-3d' | 'pixar-acao' | 'pixar-antagonista' | 'pixar-humano'
   personality: string
   colorPalette: string
   prompt: string
@@ -827,6 +832,9 @@ const STYLE_LABELS: Record<string, { label: string; color: string }> = {
   'fotorrealista':  { label: '📸 Fotorrealista', color: 'bg-amber-50 text-amber-700 border-amber-200' },
   'miniatura-acao': { label: '💪 Miniatura Ação', color: 'bg-blue-50 text-blue-700 border-blue-200' },
   'pixar-3d':       { label: '✨ Pixar 3D',       color: 'bg-purple-50 text-purple-700 border-purple-200' },
+  'pixar-acao':        { label: '🎬 Pixar em Ação',   color: 'bg-green-50 text-green-700 border-green-200' },
+  'pixar-antagonista': { label: '😡 Pixar Vilão',    color: 'bg-red-50 text-red-700 border-red-200' },
+  'pixar-humano':      { label: '👨‍👩‍👧 Pixar + Pessoa', color: 'bg-orange-50 text-orange-700 border-orange-200' },
 }
 
 interface CharacterAnalysis {
@@ -1068,27 +1076,35 @@ function PhotoObjectMode({
 export default function ReelCreatorPage() {
   const supabase = createClient()
 
-  // Niche detection
+  // Niche + persona + plan detection
   const [niche, setNiche] = useState<string>('')
+  const [tenantPlan, setTenantPlan] = useState<string>('')
   useEffect(() => {
-    async function detectNiche() {
+    async function loadTenantData() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const { data } = await supabase
         .from('profiles')
-        .select('tenant:tenants(niche)')
+        .select('tenant:tenants(niche, plan, tenant_settings(content_persona_id))')
         .eq('id', user.id)
         .single()
-      const n = (data?.tenant as { niche?: string } | null)?.niche ?? ''
-      setNiche(n)
+      const tenant = data?.tenant as { niche?: string; plan?: string; tenant_settings?: { content_persona_id?: string }[] } | null
+      setNiche(tenant?.niche ?? '')
+      setTenantPlan(tenant?.plan ?? '')
+      const savedPersona = tenant?.tenant_settings?.[0]?.content_persona_id
+      if (savedPersona) setPersonaId(savedPersona as PersonaId)
     }
-    detectNiche()
+    loadTenantData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Input mode
   const [inputMode, setInputMode] = useState<'text' | 'photo'>('text')
   const [character, setCharacter] = useState<SelectedCharacter | null>(null)
+
+  // Persona
+  const [personaId, setPersonaId] = useState<PersonaId | null>(null)
+  const [showPersonaPanel, setShowPersonaPanel] = useState(false)
 
   // Form state
   const [topic, setTopic] = useState('')
@@ -1105,6 +1121,22 @@ export default function ReelCreatorPage() {
   const [ttsAudioBlobUrl, setTtsAudioBlobUrl] = useState<string | null>(null)
   const [sceneImageUrls, setSceneImageUrls] = useState<(string | null)[]>([])
   const outputRef = useRef<HTMLDivElement>(null)
+
+  // Auto-post modal
+  const [showAutoPost, setShowAutoPost] = useState(false)
+  const isProMax = ['pro_max', 'enterprise'].includes(tenantPlan)
+
+  // Extract post caption + hashtags from generated output
+  const extractPostContent = useMemo(() => {
+    if (!output) return { caption: '', hashtags: [] }
+    const postSection = output.match(/## 📱 TEXTO DO POST\n([\s\S]*?)(?=\n## |$)/)
+    const rawCaption = postSection?.[1]?.trim() ?? ''
+    // Extract hashtags from end of caption
+    const hashtagMatch = rawCaption.match(/(#\w[\w\u00C0-\u017F]*(?:\s+#\w[\w\u00C0-\u017F]*)*)\s*$/)
+    const hashtags = hashtagMatch ? hashtagMatch[1].split(/\s+/) : []
+    const caption = hashtagMatch ? rawCaption.slice(0, hashtagMatch.index).trim() : rawCaption
+    return { caption, hashtags }
+  }, [output])
 
   function handleCharacterSelected(c: SelectedCharacter) {
     setCharacter(c)
@@ -1134,6 +1166,7 @@ export default function ReelCreatorPage() {
           talkingObject,
           characterDna: character?.dna || undefined,
           characterObject: character?.object || undefined,
+          personaId: personaId || undefined,
         }),
       })
 
@@ -1162,7 +1195,7 @@ export default function ReelCreatorPage() {
     } finally {
       setGenerating(false)
     }
-  }, [topic, url, description, format, duration, talkingObject, generating, character])
+  }, [topic, url, description, format, duration, talkingObject, generating, character, personaId])
 
   const nicheLabel = NICHE_LABELS[niche] ?? niche
 
@@ -1184,16 +1217,25 @@ export default function ReelCreatorPage() {
             )}
           </p>
         </div>
-        {done && (
-          <button
-            type="button"
-            onClick={() => { setOutput(''); setDone(false) }}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50"
+        <div className="flex items-center gap-2">
+          <Link
+            href="/reel-creator/analisar"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100 transition-colors font-medium"
           >
-            <RefreshCw className="w-4 h-4" />
-            Novo reel
-          </button>
-        )}
+            <Zap className="w-4 h-4" />
+            Analisar por Link
+          </Link>
+          {done && (
+            <button
+              type="button"
+              onClick={() => { setOutput(''); setDone(false) }}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Novo reel
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Form */}
@@ -1226,6 +1268,38 @@ export default function ReelCreatorPage() {
               <Camera className="w-3.5 h-3.5" />
               Foto do produto
             </button>
+          </div>
+
+          {/* ── Persona de conteúdo ── */}
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowPersonaPanel(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <Wand className="w-4 h-4 text-purple-500" />
+                <span className="text-sm font-medium text-gray-800">Persona de Conteúdo</span>
+                {personaId ? (
+                  <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-50 border border-purple-200 rounded-full text-xs font-medium text-purple-700">
+                    {CONTENT_PERSONAS[personaId].emoji} {CONTENT_PERSONAS[personaId].name}
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-400">Nenhuma selecionada</span>
+                )}
+              </div>
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPersonaPanel ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showPersonaPanel && (
+              <div className="border-t border-gray-100 p-4">
+                <PersonaSelector
+                  selected={personaId}
+                  onSelect={id => { setPersonaId(id); setShowPersonaPanel(false) }}
+                  hideFooter
+                />
+              </div>
+            )}
           </div>
 
           {/* ── Photo mode: character selection ── */}
@@ -1410,14 +1484,46 @@ export default function ReelCreatorPage() {
         </div>
       )}
 
+      {/* Auto-post modal */}
+      {showAutoPost && (
+        <AutoPostModal
+          isOpen={showAutoPost}
+          onClose={() => setShowAutoPost(false)}
+          caption={extractPostContent.caption}
+          hashtags={extractPostContent.hashtags}
+          mediaUrls={sceneImageUrls.filter((u): u is string => !!u)}
+          mediaType={format === 'reel' ? 'reel' : format === 'carrossel' ? 'carousel' : 'image'}
+        />
+      )}
+
       {/* Results — sectioned cards */}
       {done && sections.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-gray-700">Pacote gerado ✓</p>
-            <CopyBtn text={output} />
+            <div className="flex items-center gap-2">
+              {isProMax ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAutoPost(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Auto-publicar
+                </button>
+              ) : (
+                <a
+                  href="/assinatura"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-500 text-xs rounded-lg hover:bg-gray-200 transition-colors border border-dashed border-gray-300"
+                  title="Recurso PRO MAX"
+                >
+                  🚀 Auto-publicar (PRO MAX)
+                </a>
+              )}
+              <CopyBtn text={output} />
+            </div>
           </div>
-          <SceneImagePanel output={output} />
+          <SceneImagePanel output={output} onImagesUpdate={setSceneImageUrls} characterDna={character?.dna} />
           <VoicePanel output={output} onAudioReady={setTtsAudioBlobUrl} />
           <LipSyncPanel audioBlobUrl={ttsAudioBlobUrl} />
           {sections.map(s => (

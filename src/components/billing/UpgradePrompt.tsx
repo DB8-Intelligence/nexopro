@@ -9,6 +9,7 @@ const PLAN_LABELS: Record<PlanType, string> = {
   starter: 'Starter',
   pro: 'Pro',
   pro_plus: 'Pro Plus',
+  pro_max: 'PRO MAX',
   enterprise: 'Enterprise',
 }
 

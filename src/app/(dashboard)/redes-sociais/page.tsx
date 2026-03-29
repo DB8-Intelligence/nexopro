@@ -7,6 +7,7 @@ import { Share2 } from 'lucide-react'
 export default function RedesSociaisPage() {
   const { isPlanAtLeast } = useAuth()
   const isPro = isPlanAtLeast('pro')
+  const isProMax = isPlanAtLeast('pro_max')
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -16,10 +17,10 @@ export default function RedesSociaisPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Redes Sociais IA</h1>
-          <p className="text-sm text-gray-500">Crie conteúdo e gerencie seu calendário editorial</p>
+          <p className="text-sm text-gray-500">Crie conteúdo, gerencie calendário e publique automaticamente</p>
         </div>
       </div>
-      <RedesSociaisView isPro={isPro} />
+      <RedesSociaisView isPro={isPro} isProMax={isProMax} />
     </div>
   )
 }

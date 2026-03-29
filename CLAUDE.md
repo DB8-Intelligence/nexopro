@@ -293,7 +293,7 @@ export const CONTENT_PLAN_LIMITS = {
 
 ## 🗄️ BANCO DE DADOS — TODAS AS TABELAS
 
-### ✅ PRODUÇÃO — migrations 001-007 aplicadas (pclqjwegljrglaslppag)
+### ✅ PRODUÇÃO — migrations 001-007 aplicadas (008 pendente de push) (pclqjwegljrglaslppag)
 ```
 Core multi-tenant:    tenants · profiles · tenant_settings · tenant_modules
 Operacional:          clients · services · appointments · documents

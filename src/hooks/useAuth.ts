@@ -81,7 +81,7 @@ export function useAuth() {
   const isPlanAtLeast = useCallback(
     (minPlan: PlanType): boolean => {
       if (!state.tenant) return false
-      const order: PlanType[] = ['trial', 'starter', 'pro', 'pro_plus', 'enterprise']
+      const order: PlanType[] = ['trial', 'starter', 'pro', 'pro_plus', 'pro_max', 'enterprise']
       const tenantIndex = order.indexOf(state.tenant.plan)
       const minIndex = order.indexOf(minPlan)
       return tenantIndex >= minIndex
