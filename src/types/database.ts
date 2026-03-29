@@ -130,6 +130,15 @@ export interface TenantSettings {
   nfse_provider: string | null
   nfse_token: string | null
   nfse_environment: string
+  branding_completed: boolean
+  branding_about: string | null
+  branding_audience: string | null
+  branding_tone: string | null
+  branding_differential: string | null
+  branding_pain_point: string | null
+  branding_colors: string | null
+  branding_phrase: string | null
+  branding_updated_at: string | null
   created_at: string
   updated_at: string
 }

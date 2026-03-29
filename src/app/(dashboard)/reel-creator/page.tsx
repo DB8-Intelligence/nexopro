@@ -8,6 +8,7 @@ import { PersonaSelector } from '@/components/content-ai/PersonaSelector'
 import { CONTENT_PERSONAS } from '@/lib/content-ai/content-personas'
 import type { PersonaId } from '@/lib/content-ai/content-personas'
 import { AutoPostModal } from '@/components/content-ai/AutoPostModal'
+import { BrandingWizard } from '@/components/content-ai/BrandingWizard'
 import { getTalkingObjectsForNiche } from '@/lib/content-ai/talking-objects'
 import type { TalkingObject } from '@/lib/content-ai/talking-objects'
 
@@ -1081,23 +1082,35 @@ function PhotoObjectMode({
 export default function ReelCreatorPage() {
   const supabase = createClient()
 
-  // Niche + persona + plan detection
+  // Niche + persona + plan + branding detection
   const [niche, setNiche] = useState<string>('')
   const [tenantPlan, setTenantPlan] = useState<string>('')
+  const [tenantName, setTenantName] = useState<string>('')
+  const [showBrandingWizard, setShowBrandingWizard] = useState(false)
+  const [simpleMode, setSimpleMode] = useState(true)
+
   useEffect(() => {
     async function loadTenantData() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const { data } = await supabase
         .from('profiles')
-        .select('tenant:tenants(niche, plan, tenant_settings(content_persona_id))')
+        .select('tenant:tenants(name, niche, plan, tenant_settings(content_persona_id, branding_completed))')
         .eq('id', user.id)
         .single()
-      const tenant = data?.tenant as { niche?: string; plan?: string; tenant_settings?: { content_persona_id?: string }[] } | null
+      const tenant = data?.tenant as {
+        name?: string
+        niche?: string
+        plan?: string
+        tenant_settings?: { content_persona_id?: string; branding_completed?: boolean }[]
+      } | null
       setNiche(tenant?.niche ?? '')
       setTenantPlan(tenant?.plan ?? '')
-      const savedPersona = tenant?.tenant_settings?.[0]?.content_persona_id
-      if (savedPersona) setPersonaId(savedPersona as PersonaId)
+      setTenantName(tenant?.name ?? '')
+      const settings = tenant?.tenant_settings?.[0]
+      if (settings?.content_persona_id) setPersonaId(settings.content_persona_id as PersonaId)
+      // Show branding wizard if not completed
+      if (!settings?.branding_completed) setShowBrandingWizard(true)
     }
     loadTenantData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1210,6 +1223,16 @@ export default function ReelCreatorPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
+
+      {/* Branding Wizard — shown on first access */}
+      {showBrandingWizard && niche && (
+        <BrandingWizard
+          businessName={tenantName || 'seu negócio'}
+          niche={niche}
+          onComplete={() => setShowBrandingWizard(false)}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -1247,9 +1270,71 @@ export default function ReelCreatorPage() {
         </div>
       </div>
 
-      {/* Form */}
-      {!done && (
+      {/* ── Modo Simples ── */}
+      {!done && simpleMode && (
         <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-gray-900">✨ Sobre o que é o reel de hoje?</p>
+              <p className="text-xs text-gray-400 mt-0.5">Escreva o tema e o sistema cuida do resto</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSimpleMode(false)}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              Modo avançado →
+            </button>
+          </div>
+          <textarea
+            value={topic}
+            onChange={e => setTopic(e.target.value)}
+            placeholder={
+              niche === 'beleza'      ? 'Ex: promoção de coloração, dicas de cabelo, antes e depois...' :
+              niche === 'tecnico'     ? 'Ex: conserto de celular, troca de tela, diagnóstico grátis...' :
+              niche === 'saude'       ? 'Ex: prevenção de doenças, dica de saúde, importância do check-up...' :
+              niche === 'juridico'    ? 'Ex: direitos do trabalhador, como funciona a rescisão, dica jurídica...' :
+              niche === 'imoveis'     ? 'Ex: financiamento facilitado, dica para comprar imóvel, novo lançamento...' :
+              niche === 'pet'         ? 'Ex: dica de alimentação, vacinas do pet, banho e tosa em promoção...' :
+              niche === 'educacao'    ? 'Ex: dica de estudo, como passar no vestibular, curso em promoção...' :
+              niche === 'nutricao'    ? 'Ex: dica de alimentação, cardápio semanal, como emagrecer sem dieta...' :
+              niche === 'engenharia'  ? 'Ex: dica de reforma, erro comum na construção, orçamento gratuito...' :
+              niche === 'fotografia'  ? 'Ex: dica de foto, promoção de ensaio, bastidores de casamento...' :
+              niche === 'gastronomia' ? 'Ex: prato do dia, receita especial, promoção do almoço...' :
+              niche === 'fitness'     ? 'Ex: dica de treino, erro na academia, como ganhar músculo...' :
+              niche === 'financas'    ? 'Ex: como pagar menos imposto, dica para MEI, declaração do IR...' :
+              'Ex: promoção, dica, produto novo, depoimento de cliente...'
+            }
+            rows={3}
+            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            type="button"
+            onClick={generate}
+            disabled={!topic.trim() || generating}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {generating
+              ? <><RefreshCw className="w-4 h-4 animate-spin" /> Criando seu reel...</>
+              : <><Sparkles className="w-4 h-4" /> Criar Reel</>
+            }
+          </button>
+        </div>
+      )}
+
+      {/* Form — Modo Avançado */}
+      {!done && !simpleMode && (
+        <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-4">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm font-semibold text-gray-700">⚙️ Modo Avançado</p>
+            <button
+              type="button"
+              onClick={() => setSimpleMode(true)}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              ← Modo simples
+            </button>
+          </div>
 
           {/* ── Mode selector ── */}
           <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">

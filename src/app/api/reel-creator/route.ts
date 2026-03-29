@@ -177,15 +177,39 @@ export async function POST(req: NextRequest) {
     return new Response('Tema obrigatório', { status: 400 })
   }
 
-  // Auto-detect niche from tenant profile
+  // Auto-detect niche + tenant_id from profile
   const { data: profile } = await supabase
     .from('profiles')
-    .select('tenant:tenants(niche)')
+    .select('tenant_id, tenant:tenants(niche)')
     .eq('id', user.id)
     .single()
 
   const niche = (profile?.tenant as { niche?: string } | null)?.niche ?? 'tecnico'
   const nichoLabel = NICHE_LABELS[niche] ?? niche
+
+  // Fetch branding profile for personalized prompts
+  let brandingSection = ''
+  if (profile?.tenant_id) {
+    const { data: settings } = await supabase
+      .from('tenant_settings')
+      .select('branding_about, branding_audience, branding_tone, branding_differential, branding_pain_point, branding_colors, branding_phrase')
+      .eq('tenant_id', profile.tenant_id)
+      .single()
+
+    if (settings) {
+      const parts: string[] = []
+      if (settings.branding_about)        parts.push(`**Negócio:** ${settings.branding_about}`)
+      if (settings.branding_audience)     parts.push(`**Público-alvo:** ${settings.branding_audience}`)
+      if (settings.branding_tone)         parts.push(`**Tom de voz:** ${settings.branding_tone}`)
+      if (settings.branding_differential) parts.push(`**Diferencial:** ${settings.branding_differential}`)
+      if (settings.branding_pain_point)   parts.push(`**Dor resolvida:** ${settings.branding_pain_point}`)
+      if (settings.branding_colors)       parts.push(`**Cores da marca:** ${settings.branding_colors}`)
+      if (settings.branding_phrase)       parts.push(`**Slogan:** "${settings.branding_phrase}"`)
+      if (parts.length > 0) {
+        brandingSection = `\n\n---\n\n## 🏢 PERFIL DA MARCA\n\n${parts.join('\n')}\n\nAdapte TODO o conteúdo para refletir este perfil de marca. Use o diferencial, a dor e o público-alvo em cada cena, narração e CTA.`
+      }
+    }
+  }
 
   const prompt = buildPrompt({
     nichoLabel,
@@ -211,7 +235,7 @@ export async function POST(req: NextRequest) {
         const response = anthropic.messages.stream({
           model: 'claude-sonnet-4-6',
           max_tokens: 4096,
-          system: 'Você é o ReelCreator AI. Gere conteúdo de alta qualidade, concreto e pronto para produção. Use emojis para demarcar seções. Seja específico para o nicho fornecido.',
+          system: `Você é o ReelCreator AI. Gere conteúdo de alta qualidade, concreto e pronto para produção. Use emojis para demarcar seções. Seja específico para o nicho fornecido.${brandingSection}`,
           messages: [{ role: 'user', content: prompt }],
         })
 
