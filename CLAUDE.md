@@ -1,25 +1,31 @@
-# NEXOPRO — PROJECT MEMORY & AGENT INSTRUCTIONS
+# NEXOOMNIX — PROJECT MEMORY & AGENT INSTRUCTIONS
 # Cole este arquivo na RAIZ do projeto Next.js
 # O Claude Code lerá isso automaticamente em toda sessão
-# Versão: 3.0 — Unificação DB8-Intelligence (Março 2026)
+# Versão: 4.0 — Rebranding NexoOmnix (Março 2026)
 # ============================================================
 
 ## 🎯 VISÃO DO PRODUTO
 
-NexoPro é a plataforma SaaS central da DB8-Intelligence que entrega:
-- **Gestão operacional** (agenda, clientes, serviços, financeiro, contabilidade)
-- **ContentAI** — geração de conteúdo viral (reels, posts, carrosseis, talking objects)
-- **Site público automático** por nicho
-- **Agente IA** disponível 24h (contador, corretor, atendimento)
+**NexoOmnix** (marca: **Omnix**) é a plataforma SaaS central da DB8-Intelligence que entrega:
+- **Omnix Agenda** — agendamentos e ordens de serviço
+- **Omnix CRM** — gestão de clientes e relacionamento
+- **Omnix Reels** — geração de reels virais com IA
+- **Omnix Social** — posts automáticos nas redes sociais
+- **Omnix Sites** — site público por nicho com agendamento online
+- **Omnix Content** — pacote completo ContentAI
+- **Financeiro / Contabilidade** — DRE, NFS-e, Agente IA Contador 24h
+
+Posicionamento: **"Plataforma completa para criar, automatizar e escalar o marketing digital de empresas"**
 
 Cada cliente (tenant) tem instância isolada com módulos do seu nicho.
 
 ### Produtos neste repositório (1 codebase, múltiplos domínios Vercel)
 | Domínio | Nicho padrão | Produto |
 |---------|-------------|---------|
-| nexopro.app | all | Plataforma completa |
+| nexoomnix.com | all | Plataforma completa (domínio principal) |
+| nexopro.app | all | Alias legacy |
 | imobpro.app | imoveis | iMobCreator mode |
-| reelcreator.app | content-ai | ContentAI mode |
+| reelcreator.app | content-ai | Omnix Reels mode |
 | salaopro.app | beleza | Salão Pro mode |
 
 ---
