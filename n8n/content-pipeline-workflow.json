@@ -1,0 +1,274 @@
+{
+  "name": "NexoOmnix — Content Pipeline (Ciclo Semanal de Conteúdo)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{
+            "field": "cronExpression",
+            "expression": "0 8 * * 1"
+          }]
+        }
+      },
+      "id": "schedule-segunda",
+      "name": "Schedule — Segunda 08h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 400],
+      "notes": "Dispara toda segunda-feira às 08h"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "getAll",
+        "tableId": "tenants",
+        "returnAll": true,
+        "filterType": "manual",
+        "filters": {
+          "conditions": [
+            { "keyName": "status", "keyValue": "active", "condition": "eq" }
+          ]
+        },
+        "select": "id,name,niche,plan"
+      },
+      "id": "buscar-tenants",
+      "name": "Buscar Tenants Ativos",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 400],
+      "credentials": { "supabaseApi": { "id": "supabase-nexoomnix", "name": "Supabase NexoOmnix" } }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "id": "split-tenants",
+      "name": "Para cada Tenant",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Busca a Skill ativa do nicho do tenant\nconst tenant = $input.item.json;\nconst nicho = tenant.niche;\n\nconst SUPABASE_URL = $env.SUPABASE_URL;\nconst SUPABASE_KEY = $env.SUPABASE_SERVICE_ROLE_KEY;\n\nconst res = await fetch(\n  `${SUPABASE_URL}/rest/v1/agent_skills?nicho=eq.${nicho}&status=eq.ativo&select=*&limit=1`,\n  { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }\n);\nconst skills = await res.json();\n\nif (!skills || skills.length === 0) {\n  // Aciona geração de Skill e usa fallback genérico\n  await fetch($env.N8N_SKILL_FACTORY_WEBHOOK, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ nicho, tenant_id: tenant.id })\n  }).catch(() => {});\n\n  return [{ json: {\n    tenant,\n    skill_status: 'fallback_generico',\n    skill_context: `NICHO: ${nicho}\\nUse estratégias universais de crescimento no Instagram para profissionais do nicho ${nicho} no Brasil.`,\n    alerta: `⚠️ Skill para ${nicho} sendo gerada. Usando fallback.`\n  }}];\n}\n\nconst skill = skills[0];\nconst skillContext = `\n═══ SKILL ATIVA: ${skill.display_name} ═══\n\n${skill.skill_header}\n\nPILARES: ${JSON.stringify(skill.pilares)}\n\nMIX: ${JSON.stringify(skill.mix_conteudo)}\n\nHOOKS (amostra): ${skill.hooks_banco.slice(0, 10).join(' | ')}\n\nGAPS COMUNS: ${JSON.stringify(skill.gaps_comuns)}\n═══════════════════════════════\n`;\n\nreturn [{ json: { tenant, skill_context: skillContext, skill_data: skill, skill_status: 'ativo' } }];"
+      },
+      "id": "buscar-skill-nicho",
+      "name": "Buscar Skill do Nicho",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "claude-sonnet-4-20250514" },
+            { "name": "max_tokens", "value": "2000" },
+            {
+              "name": "system",
+              "value": "Você é o Trends Agent do NexoOmnix — pesquisador de tendências de conteúdo digital para profissionais autônomos e pequenas empresas brasileiras. Identifique trends do Instagram Brasil para o nicho recebido. NUNCA misture tendências de nichos diferentes. Retorne APENAS JSON válido com: { cliente, segmento, semana_referencia, trends_semana, formatos_emergentes, oportunidades_pauta, alerta_urgente }"
+            },
+            {
+              "name": "messages",
+              "value": "=[{ \"role\": \"user\", \"content\": \"Analise trends para: \" + JSON.stringify({ segmento: $json.tenant.niche, semana: new Date().toLocaleDateString('pt-BR'), skill_context: $json.skill_context }) }]"
+            }
+          ]
+        }
+      },
+      "id": "trends-agent",
+      "name": "Trends Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const trendsRaw = $input.item.json.content[0].text;\nlet trends;\ntry {\n  trends = JSON.parse(trendsRaw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim());\n} catch { trends = { oportunidades_pauta: [], trends_semana: [] }; }\nreturn [{ json: { ...$('Buscar Skill do Nicho').item.json, trends } }];"
+      },
+      "id": "parse-trends",
+      "name": "Parse Trends",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "claude-sonnet-4-20250514" },
+            { "name": "max_tokens", "value": "3000" },
+            {
+              "name": "system",
+              "value": "Você é o Strategist Agent do NexoOmnix, o melhor estrategista de conteúdo digital para profissionais autônomos e pequenas empresas no Brasil. Crie calendários editoriais semanais e defina pilares de conteúdo com base no briefing e na Skill do nicho. Retorne APENAS JSON válido: { cliente, segmento, skill_ativada, semana_referencia, pilares, calendario_semanal, formatos_prioritarios, frequencia_recomendada, objetivo_semana, kpis_monitorar }"
+            },
+            {
+              "name": "messages",
+              "value": "=[{ \"role\": \"user\", \"content\": \"Crie calendário semanal para: \" + JSON.stringify({ tenant: $json.tenant, skill_context: $json.skill_context, trends: $json.trends?.oportunidades_pauta ?? [] }) }]"
+            }
+          ]
+        }
+      },
+      "id": "strategist-agent",
+      "name": "Strategist Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stratRaw = $input.item.json.content[0].text;\nlet estrategia;\ntry {\n  estrategia = JSON.parse(stratRaw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim());\n} catch { estrategia = { calendario_semanal: [], pilares: [] }; }\nreturn [{ json: { ...$('Parse Trends').item.json, estrategia } }];"
+      },
+      "id": "parse-estrategia",
+      "name": "Parse Estratégia",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Executa Copywriter + Scripter em paralelo (Promise.all)\nconst data = $input.item.json;\nconst ANTHROPIC_KEY = $env.ANTHROPIC_API_KEY;\n\nasync function callAgent(system, userContent, maxTokens = 2000) {\n  const res = await fetch('https://api.anthropic.com/v1/messages', {\n    method: 'POST',\n    headers: {\n      'anthropic-version': '2023-06-01',\n      'x-api-key': ANTHROPIC_KEY,\n      'Content-Type': 'application/json'\n    },\n    body: JSON.stringify({\n      model: 'claude-sonnet-4-20250514',\n      max_tokens: maxTokens,\n      system,\n      messages: [{ role: 'user', content: userContent }]\n    })\n  });\n  const json = await res.json();\n  return json.content[0].text;\n}\n\nconst copySystem = `Você é o Copywriter Agent do NexoOmnix, especializado em copy para profissionais autônomos e pequenas empresas no mercado brasileiro. Escreva legendas, hooks, CTAs prontos para publicação. Use a Skill do nicho. Retorne APENAS JSON: { cliente, segmento, posts: [{ dia, tema, formato, hook, legenda_completa, cta, hashtags }], tom_aplicado }`;\n\nconst scriptSystem = `Você é o Scripter Agent do NexoOmnix, roteirista especializado em Reels para profissionais brasileiros. Crie roteiros cena-a-cena com hooks virais, scripts de voz com marcações e prompts AI em inglês. Retorne APENAS JSON: { cliente, segmento, reels: [{ titulo, duracao_total, hook_visual, cenas: [{ numero, tempo, tipo, visual, texto_tela, voz, prompt_ai }], roteiro_voz_completo, talking_object }] }`;\n\nconst inputStr = JSON.stringify({\n  tenant: data.tenant,\n  skill_context: data.skill_context,\n  calendario: data.estrategia?.calendario_semanal ?? []\n});\n\nconst [copyRaw, scriptRaw] = await Promise.all([\n  callAgent(copySystem, 'Gere as legendas da semana para: ' + inputStr),\n  callAgent(scriptSystem, 'Gere os roteiros da semana para: ' + inputStr, 3000)\n]);\n\nfunction parseJSON(raw) {\n  try { return JSON.parse(raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim()); }\n  catch { return {}; }\n}\n\nreturn [{ json: { ...data, copy: parseJSON(copyRaw), scripts: parseJSON(scriptRaw) } }];"
+      },
+      "id": "copy-script-paralelo",
+      "name": "Copywriter + Scripter (paralelo)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "create",
+        "tableId": "content_projects",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "tenant_id", "fieldValue": "={{ $json.tenant.id }}" },
+            { "fieldId": "title", "fieldValue": "=Pacote Semanal — {{ new Date().toLocaleDateString('pt-BR') }}" },
+            { "fieldId": "nicho", "fieldValue": "={{ $json.tenant.niche }}" },
+            { "fieldId": "status", "fieldValue": "completed" },
+            { "fieldId": "analysis", "fieldValue": "={{ JSON.stringify({ estrategia: $json.estrategia, trends: $json.trends }) }}" },
+            { "fieldId": "generated_scenes", "fieldValue": "={{ JSON.stringify($json.scripts) }}" },
+            { "fieldId": "generated_post_text", "fieldValue": "={{ JSON.stringify($json.copy) }}" }
+          ]
+        }
+      },
+      "id": "salvar-supabase",
+      "name": "Salvar Pacote no Supabase",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2220, 400],
+      "credentials": { "supabaseApi": { "id": "supabase-nexoomnix", "name": "Supabase NexoOmnix" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_APP_URL }}/api/webhooks/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.N8N_WEBHOOK_TOKEN }}" }]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "event", "value": "content_package_ready" },
+            { "name": "tenant_id", "value": "={{ $json.tenant.id }}" },
+            { "name": "package_id", "value": "={{ $('Salvar Pacote no Supabase').item.json.id }}" }
+          ]
+        }
+      },
+      "id": "webhook-app",
+      "name": "Webhook → ReelCreator SaaS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2440, 400]
+    },
+    {
+      "parameters": {
+        "amount": 48,
+        "unit": "hours"
+      },
+      "id": "wait-48h",
+      "name": "Aguardar 48h (pós-publicação)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2660, 400],
+      "webhookId": "wait-48h-analyst"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "claude-sonnet-4-20250514" },
+            { "name": "max_tokens", "value": "1500" },
+            {
+              "name": "system",
+              "value": "Você é o Analyst Agent do NexoOmnix, especializado em análise de performance de conteúdo digital. Receba métricas de posts e entregue diagnóstico, score de conteúdo e próximos testes A/B. Retorne APENAS JSON: { segmento, er_calculado, score_conteudo, classificacao, diagnostico_sintoma, gaps_identificados, otimizacoes, proximos_testes_ab, alimenta_strategist }"
+            },
+            {
+              "name": "messages",
+              "value": "=[{ \"role\": \"user\", \"content\": \"Analise performance do pacote da semana para tenant: \" + JSON.stringify({ tenant: $json.tenant, package_id: $('Salvar Pacote no Supabase').item.json.id, skill_context: $json.skill_context }) }]"
+            }
+          ]
+        }
+      },
+      "id": "analyst-agent",
+      "name": "Analyst Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2880, 400]
+    }
+  ],
+  "connections": {
+    "Schedule — Segunda 08h":        { "main": [[{ "node": "Buscar Tenants Ativos",          "type": "main", "index": 0 }]] },
+    "Buscar Tenants Ativos":          { "main": [[{ "node": "Para cada Tenant",               "type": "main", "index": 0 }]] },
+    "Para cada Tenant":               { "main": [[{ "node": "Buscar Skill do Nicho",           "type": "main", "index": 0 }]] },
+    "Buscar Skill do Nicho":          { "main": [[{ "node": "Trends Agent",                    "type": "main", "index": 0 }]] },
+    "Trends Agent":                   { "main": [[{ "node": "Parse Trends",                    "type": "main", "index": 0 }]] },
+    "Parse Trends":                   { "main": [[{ "node": "Strategist Agent",                "type": "main", "index": 0 }]] },
+    "Strategist Agent":               { "main": [[{ "node": "Parse Estratégia",                "type": "main", "index": 0 }]] },
+    "Parse Estratégia":               { "main": [[{ "node": "Copywriter + Scripter (paralelo)", "type": "main", "index": 0 }]] },
+    "Copywriter + Scripter (paralelo)":{ "main": [[{ "node": "Salvar Pacote no Supabase",      "type": "main", "index": 0 }]] },
+    "Salvar Pacote no Supabase":      { "main": [[{ "node": "Webhook → ReelCreator SaaS",      "type": "main", "index": 0 }]] },
+    "Webhook → ReelCreator SaaS":     { "main": [[{ "node": "Aguardar 48h (pós-publicação)",   "type": "main", "index": 0 }]] },
+    "Aguardar 48h (pós-publicação)":  { "main": [[{ "node": "Analyst Agent",                   "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": ["nexoomnix", "content-pipeline", "agents"]
+}
