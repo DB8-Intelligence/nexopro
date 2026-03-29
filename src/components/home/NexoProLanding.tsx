@@ -10,8 +10,11 @@ const NICHES = [
   { slug: 'pet',         name: 'Pet Shop & Vet',        href: '/petpro',      emoji: '🐾' },
   { slug: 'educacao',    name: 'Escola & Cursos',       href: '/educapro',    emoji: '🎓' },
   { slug: 'nutricao',    name: 'Nutrição & Fitness',    href: '/nutripro',    emoji: '🥗' },
-  { slug: 'engenharia',  name: 'Engenharia & Arquitetura', href: '/engepro',  emoji: '🏗️' },
+  { slug: 'engenharia',  name: 'Engenharia & Arquitetura', href: '/engepro',     emoji: '🏗️' },
   { slug: 'fotografia',  name: 'Fotografia & Vídeo',    href: '/fotopro',     emoji: '📸' },
+  { slug: 'gastronomia', name: 'Restaurante & Bar',      href: '/gastronomia', emoji: '🍽️' },
+  { slug: 'fitness',     name: 'Academia & Personal',    href: '/fitness',     emoji: '💪' },
+  { slug: 'financas',    name: 'Contabilidade & Finanças', href: '/financas', emoji: '📊' },
 ]
 
 const FEATURES = [

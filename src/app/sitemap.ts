@@ -15,6 +15,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/nutripro',
     '/engepro',
     '/fotopro',
+    '/gastronomia',
+    '/fitness',
+    '/financas',
   ]
 
   return landingPages.map(path => ({

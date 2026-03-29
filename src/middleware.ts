@@ -22,6 +22,9 @@ const PUBLIC_ROUTES = [
   '/nutripro',
   '/engepro',
   '/fotopro',
+  '/gastronomia',
+  '/fitness',
+  '/financas',
   '/reelcreator',
 ]
 
