@@ -46,13 +46,26 @@ export function TalkingObjectSelector({
           >
             <span className="text-3xl flex-shrink-0">{obj.emoji}</span>
             <div className="flex-1 min-w-0">
-              <p className={cn(
-                'text-sm font-semibold',
-                selected?.id === obj.id ? 'text-blue-700' : 'text-gray-800'
-              )}>
-                {obj.name}
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{obj.prompt}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className={cn(
+                  'text-sm font-semibold',
+                  selected?.id === obj.id ? 'text-blue-700' : 'text-gray-800'
+                )}>
+                  {obj.name}
+                </p>
+                {obj.personalidade && (
+                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600 font-medium">
+                    {obj.personalidade}
+                  </span>
+                )}
+              </div>
+              {obj.gancho ? (
+                <p className="text-xs text-gray-600 mt-1 italic line-clamp-2">
+                  &ldquo;{obj.gancho}&rdquo;
+                </p>
+              ) : (
+                <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{obj.prompt}</p>
+              )}
             </div>
             {selected?.id === obj.id && (
               <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
@@ -65,6 +78,7 @@ export function TalkingObjectSelector({
 
       <div className="flex gap-3">
         <button
+          type="button"
           onClick={onBack}
           className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50"
         >
@@ -72,6 +86,7 @@ export function TalkingObjectSelector({
           Voltar
         </button>
         <button
+          type="button"
           onClick={() => { onSelect(null); onContinue() }}
           className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50"
         >
@@ -79,6 +94,7 @@ export function TalkingObjectSelector({
           Pular
         </button>
         <button
+          type="button"
           onClick={onContinue}
           disabled={loading}
           className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-40"

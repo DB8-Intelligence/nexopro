@@ -15,6 +15,9 @@ export type NicheType =
   | 'nutricao'
   | 'engenharia'
   | 'fotografia'
+  | 'gastronomia'
+  | 'fitness'
+  | 'financas'
 
 export type PlanType = 'trial' | 'starter' | 'pro' | 'pro_plus' | 'pro_max' | 'enterprise'
 
@@ -88,6 +91,8 @@ export interface Tenant {
   stripe_price_id: string | null
   billing_cycle_anchor: string | null
   cancel_at_period_end: boolean
+  addon_talking_objects: boolean
+  addon_talking_objects_stripe_sub: string | null
   created_at: string
   updated_at: string
 }

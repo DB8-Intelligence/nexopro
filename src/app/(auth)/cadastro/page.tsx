@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Zap, Scissors, Wrench, Stethoscope, Scale, Home, PawPrint,
-  GraduationCap, Apple, HardHat, Camera,
+  GraduationCap, Apple, HardHat, Camera, UtensilsCrossed, Dumbbell, Calculator,
   CheckCircle2, ChevronRight, Loader2, Eye, EyeOff
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -19,16 +19,19 @@ import type { PersonaId } from '@/lib/content-ai/content-personas'
 type Step = 'account' | 'niche' | 'business' | 'persona' | 'plan' | 'success'
 
 const NICHE_ICONS: Record<NicheSlug, React.ReactNode> = {
-  beleza:     <Scissors className="w-6 h-6" />,
-  tecnico:    <Wrench className="w-6 h-6" />,
-  saude:      <Stethoscope className="w-6 h-6" />,
-  juridico:   <Scale className="w-6 h-6" />,
-  imoveis:    <Home className="w-6 h-6" />,
-  pet:        <PawPrint className="w-6 h-6" />,
-  educacao:   <GraduationCap className="w-6 h-6" />,
-  nutricao:   <Apple className="w-6 h-6" />,
-  engenharia: <HardHat className="w-6 h-6" />,
-  fotografia: <Camera className="w-6 h-6" />,
+  beleza:      <Scissors className="w-6 h-6" />,
+  tecnico:     <Wrench className="w-6 h-6" />,
+  saude:       <Stethoscope className="w-6 h-6" />,
+  juridico:    <Scale className="w-6 h-6" />,
+  imoveis:     <Home className="w-6 h-6" />,
+  pet:         <PawPrint className="w-6 h-6" />,
+  educacao:    <GraduationCap className="w-6 h-6" />,
+  nutricao:    <Apple className="w-6 h-6" />,
+  engenharia:  <HardHat className="w-6 h-6" />,
+  fotografia:  <Camera className="w-6 h-6" />,
+  gastronomia: <UtensilsCrossed className="w-6 h-6" />,
+  fitness:     <Dumbbell className="w-6 h-6" />,
+  financas:    <Calculator className="w-6 h-6" />,
 }
 
 const STEPS: { id: Step; label: string }[] = [

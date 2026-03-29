@@ -9,6 +9,9 @@ export type NicheSlug =
   | 'nutricao'
   | 'engenharia'
   | 'fotografia'
+  | 'gastronomia'
+  | 'fitness'
+  | 'financas'
 
 export interface NicheConfig {
   slug: NicheSlug
@@ -423,6 +426,116 @@ export const NICHE_CONFIGS: Record<NicheSlug, NicheConfig> = {
       { id: 'contratos', label: 'Contratos', icon: 'FileText', available: true, plans: ['pro', 'pro_plus', 'enterprise'] },
       { id: 'financeiro', label: 'Financeiro', icon: 'DollarSign', available: true, plans: ['starter', 'pro', 'pro_plus', 'enterprise'] },
       { id: 'contabilidade', label: 'Contabilidade', icon: 'BarChart3', available: true, plans: ['pro_plus', 'enterprise'] },
+      { id: 'ia_contador', label: 'IA Contador', icon: 'Bot', available: true, plans: ['enterprise'] },
+      { id: 'social', label: 'Redes Sociais IA', icon: 'Share2', available: true, plans: ['pro', 'pro_plus', 'enterprise'] },
+    ],
+  },
+
+  gastronomia: {
+    slug: 'gastronomia',
+    brandName: 'GastroPro',
+    instagram: '@gastropro.app',
+    facebook: 'GastroPro Gestão',
+    tagline: 'Gestão para restaurantes, bares, lanchonetes e food trucks',
+    description: 'Cardápio digital, reservas, comanda e financeiro para gastronomia',
+    primaryColor: '#f59e0b',
+    colorClass: 'amber',
+    icon: 'UtensilsCrossed',
+    terms: {
+      client: 'cliente',
+      clients: 'clientes',
+      appointment: 'reserva',
+      appointments: 'reservas',
+      service: 'prato',
+      services: 'pratos',
+      professional: 'chef',
+    },
+    kpiLabels: {
+      primary: 'Pedidos hoje',
+      secondary: 'Mesas ocupadas',
+      tertiary: 'Faturamento do dia',
+      quaternary: 'Ticket médio',
+    },
+    modules: [
+      { id: 'agenda', label: 'Reservas', icon: 'Calendar', available: true, plans: ['starter', 'pro', 'pro_plus', 'enterprise'] },
+      { id: 'clientes', label: 'Clientes', icon: 'Users', available: true, plans: ['starter', 'pro', 'pro_plus', 'enterprise'] },
+      { id: 'financeiro', label: 'Financeiro', icon: 'DollarSign', available: true, plans: ['starter', 'pro', 'pro_plus', 'enterprise'] },
+      { id: 'estoque', label: 'Estoque/Insumos', icon: 'Package', available: true, plans: ['pro', 'pro_plus', 'enterprise'] },
+      { id: 'contabilidade', label: 'Contabilidade', icon: 'BarChart3', available: true, plans: ['pro_plus', 'enterprise'] },
+      { id: 'nfe', label: 'Notas Fiscais', icon: 'FileText', available: true, plans: ['pro_plus', 'enterprise'] },
+      { id: 'ia_contador', label: 'IA Contador', icon: 'Bot', available: true, plans: ['enterprise'] },
+      { id: 'social', label: 'Redes Sociais IA', icon: 'Share2', available: true, plans: ['pro', 'pro_plus', 'enterprise'] },
+    ],
+  },
+
+  fitness: {
+    slug: 'fitness',
+    brandName: 'FitPro',
+    instagram: '@fitpro.app',
+    facebook: 'FitPro Gestão',
+    tagline: 'Gestão para academias, personal trainers e studios fitness',
+    description: 'Agenda, planos de treino, mensalidades e evolução para fitness',
+    primaryColor: '#ef4444',
+    colorClass: 'red',
+    icon: 'Dumbbell',
+    terms: {
+      client: 'aluno',
+      clients: 'alunos',
+      appointment: 'aula',
+      appointments: 'aulas',
+      service: 'treino',
+      services: 'treinos',
+      professional: 'personal',
+    },
+    kpiLabels: {
+      primary: 'Aulas hoje',
+      secondary: 'Alunos ativos',
+      tertiary: 'Mensalidades do mês',
+      quaternary: 'Taxa de frequência',
+    },
+    modules: [
+      { id: 'agenda', label: 'Agenda de Aulas', icon: 'Calendar', available: true, plans: ['starter', 'pro', 'pro_plus', 'enterprise'] },
+      { id: 'alunos', label: 'Alunos', icon: 'Users', available: true, plans: ['starter', 'pro', 'pro_plus', 'enterprise'] },
+      { id: 'treinos', label: 'Planos de Treino', icon: 'ClipboardList', available: true, plans: ['pro', 'pro_plus', 'enterprise'] },
+      { id: 'financeiro', label: 'Mensalidades', icon: 'DollarSign', available: true, plans: ['starter', 'pro', 'pro_plus', 'enterprise'] },
+      { id: 'contabilidade', label: 'Contabilidade', icon: 'BarChart3', available: true, plans: ['pro_plus', 'enterprise'] },
+      { id: 'ia_contador', label: 'IA Contador', icon: 'Bot', available: true, plans: ['enterprise'] },
+      { id: 'social', label: 'Redes Sociais IA', icon: 'Share2', available: true, plans: ['pro', 'pro_plus', 'enterprise'] },
+    ],
+  },
+
+  financas: {
+    slug: 'financas',
+    brandName: 'ContábilPro',
+    instagram: '@contabilpro.app',
+    facebook: 'ContábilPro',
+    tagline: 'Gestão para contadores, escritórios contábeis e consultores financeiros',
+    description: 'Controle de clientes, obrigações fiscais e financeiro para contabilidade',
+    primaryColor: '#0ea5e9',
+    colorClass: 'sky',
+    icon: 'Calculator',
+    terms: {
+      client: 'cliente',
+      clients: 'clientes',
+      appointment: 'reunião',
+      appointments: 'reuniões',
+      service: 'serviço contábil',
+      services: 'serviços contábeis',
+      professional: 'contador',
+    },
+    kpiLabels: {
+      primary: 'Clientes ativos',
+      secondary: 'Obrigações no mês',
+      tertiary: 'Honorários do mês',
+      quaternary: 'Obrigações vencendo',
+    },
+    modules: [
+      { id: 'clientes', label: 'Clientes', icon: 'Users', available: true, plans: ['starter', 'pro', 'pro_plus', 'enterprise'] },
+      { id: 'agenda', label: 'Agenda/Prazos', icon: 'Calendar', available: true, plans: ['starter', 'pro', 'pro_plus', 'enterprise'] },
+      { id: 'obrigacoes', label: 'Obrigações Fiscais', icon: 'ClipboardList', available: true, plans: ['pro', 'pro_plus', 'enterprise'] },
+      { id: 'financeiro', label: 'Financeiro', icon: 'DollarSign', available: true, plans: ['starter', 'pro', 'pro_plus', 'enterprise'] },
+      { id: 'contabilidade', label: 'Contabilidade', icon: 'BarChart3', available: true, plans: ['pro_plus', 'enterprise'] },
+      { id: 'nfe', label: 'Notas Fiscais', icon: 'FileText', available: true, plans: ['pro_plus', 'enterprise'] },
       { id: 'ia_contador', label: 'IA Contador', icon: 'Bot', available: true, plans: ['enterprise'] },
       { id: 'social', label: 'Redes Sociais IA', icon: 'Share2', available: true, plans: ['pro', 'pro_plus', 'enterprise'] },
     ],

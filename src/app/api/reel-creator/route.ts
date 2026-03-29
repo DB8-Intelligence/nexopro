@@ -17,6 +17,9 @@ const NICHE_LABELS: Record<string, string> = {
   nutricao:    'Nutrição / Dietética',
   engenharia:  'Engenharia / Construção',
   fotografia:  'Fotografia / Estúdio',
+  gastronomia: 'Gastronomia / Restaurante',
+  fitness:     'Fitness / Academia / Personal',
+  financas:    'Contabilidade / Finanças',
 }
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -34,6 +37,9 @@ function buildPrompt(p: {
   format: string
   duration: number
   talkingObject: boolean
+  talkingObjectName?: string
+  talkingObjectGancho?: string
+  talkingObjectPersonalidade?: string
   characterDna?: string
   characterObject?: string
   personaId?: PersonaId
@@ -52,7 +58,25 @@ function buildPrompt(p: {
     ? `\n**Personagem protagonista:** ${p.characterObject} animado em estilo Pixar/Disney 3D\n**DNA visual do personagem (usar como prefixo em TODOS os prompts de imagem):** ${p.characterDna}\nO personagem deve ser o PROTAGONISTA de todas as cenas. Cada prompt AI de imagem deve começar com o DNA acima.`
     : ''
 
-  const toSection = p.talkingObject ? `
+  const toSection = p.talkingObject
+    ? p.talkingObjectName && p.talkingObjectGancho
+      ? `
+
+---
+
+## 🎭 OBJETO FALANTE VIRAL — ${p.talkingObjectName}
+
+**Objeto selecionado:** ${p.talkingObjectName}
+**Personalidade:** ${p.talkingObjectPersonalidade ?? 'Expressivo, engajante'}
+**Gancho de abertura:** "${p.talkingObjectGancho}"
+
+Use este objeto como PROTAGONISTA do reel. O gancho acima deve ser a primeira fala (0–3s).
+Gere o roteiro completo (7–15s) com:
+- 🎙️ Script completo do objeto (inclua [pausa], [ÊNFASE] e expressões)
+- 🖼️ Prompt AI aprimorado (inglês) para animar o objeto com lip-sync
+- 🎬 Ferramentas recomendadas: D-ID · HeyGen · CapCut "AI Talking Photo"
+- 📱 Legenda e hashtags específicas para este formato`
+      : `
 
 ---
 
@@ -63,10 +87,12 @@ Apresente **5 opções** de objetos inanimados que representam o nicho **${p.nic
 Para cada objeto:
 
 **[N]. [EMOJI] [Nome]**
-- Conceito: Por que funciona e o que representa para ${p.nichoLabel}
+- Personalidade: tom de voz e característica principal
+- Gancho de abertura (0–3s): frase impactante para capturar atenção
 - 🖼️ Prompt AI (inglês, para Midjourney / DALL-E / Fal.ai): \`"[photorealistic 3D render, Pixar-style character, object with expressive face and lip-sync ready mouth, niche-specific setting, 9:16 vertical, cinematic lighting]"\`
-- 🎙️ Script (7–10s): O que o objeto fala (inclua [pausa] e [ÊNFASE])
-- 🎬 Ferramentas: D-ID · HeyGen · CapCut "AI Talking Photo"` : ''
+- 🎙️ Script completo (7–15s): O que o objeto fala (inclua [pausa] e [ÊNFASE])
+- 🎬 Ferramentas: D-ID · HeyGen · CapCut "AI Talking Photo"`
+    : ''
 
   return `Você é o ReelCreator AI — especialista em produção de conteúdo viral para Instagram.
 
@@ -139,6 +165,9 @@ export async function POST(req: NextRequest) {
     format: string
     duration: number
     talkingObject: boolean
+    talkingObjectName?: string
+    talkingObjectGancho?: string
+    talkingObjectPersonalidade?: string
     characterDna?: string
     characterObject?: string
     personaId?: PersonaId
@@ -166,6 +195,9 @@ export async function POST(req: NextRequest) {
     format: body.format ?? 'reel',
     duration: body.duration ?? 30,
     talkingObject: !!body.talkingObject,
+    talkingObjectName: body.talkingObjectName?.trim() || undefined,
+    talkingObjectGancho: body.talkingObjectGancho?.trim() || undefined,
+    talkingObjectPersonalidade: body.talkingObjectPersonalidade?.trim() || undefined,
     characterDna: body.characterDna?.trim() || undefined,
     characterObject: body.characterObject?.trim() || undefined,
     personaId: body.personaId || undefined,
