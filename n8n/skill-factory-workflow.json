@@ -1,0 +1,188 @@
+{
+  "name": "NexoOmnix — Skill Factory (Auto-Geração de Skills por Nicho)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 6 }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger (6h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "notes": "Verifica a cada 6h se há nichos com status pendente_geracao"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "getAll",
+        "tableId": "agent_skills",
+        "returnAll": true,
+        "filterType": "manual",
+        "filters": {
+          "conditions": [
+            { "keyName": "status", "keyValue": "pendente_geracao", "condition": "eq" }
+          ]
+        }
+      },
+      "id": "buscar-pendentes",
+      "name": "Buscar Nichos Pendentes",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": { "supabaseApi": { "id": "supabase-nexoomnix", "name": "Supabase NexoOmnix" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "tem-pendentes",
+      "name": "Tem pendentes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "id": "split-nichos",
+      "name": "Para cada nicho",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [900, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $credentials.value }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "claude-sonnet-4-20250514"
+            },
+            {
+              "name": "max_tokens",
+              "value": "8000"
+            },
+            {
+              "name": "system",
+              "value": "Você é o Skill Factory Agent do NexoOmnix — o agente responsável por criar automaticamente Skills especializadas de conteúdo social para novos nichos no mercado brasileiro.\n\nVocê replica a arquitetura de Skills já existentes e gera uma nova Skill completa e pronta para uso imediato, adaptada com precisão para o nicho recebido.\n\nARQUITETURA OBRIGATÓRIA (14 componentes):\n1. skill_header — identidade do agente no nicho\n2. pilares — 4-5 pilares de conteúdo com percentual e objetivo\n3. mix_conteudo — percentuais educativo/produto/lifestyle/humanização\n4. tom_por_subsegmento — 3-4 sub-segmentos com tom e linguagem\n5. hooks_banco — 20-30 hooks específicos (curiosidade, dado, controvérsia, POV)\n6. templates_legenda — 4-5 templates de post prontos com variáveis em [ ]\n7. templates_roteiro — 3-4 templates de narração com [pausa], [ÊNFASE], [pausa longa]\n8. prompts_ai — 6-8 prompts em inglês, formato 9:16 vertical, photorealistic\n9. talking_objects — 5 objetos animados Pixar-style com emoji, nome, prompt_base\n10. hashtags — grandes (>1M), médias (100k-1M), nicho (<100k) com variável {cidade}\n11. ctas_banco — 10-15 CTAs específicos do nicho\n12. gaps_comuns — 5-7 gaps com gap + receita\n13. ideias_conteudo — 15-20 ideias acionáveis agrupadas\n14. audiencias_ads — principal, lookalike, remarketing, restricoes_meta\n\nREGRAS:\n- NUNCA use dados genéricos — tudo específico do nicho brasileiro\n- Prompts AI sempre em inglês, aspect ratio 9:16\n- Hashtags com {cidade} como variável dinâmica\n- Tom calibrado para o mercado brasileiro\n- Considerar regulações brasileiras (CFM, OAB, CREF, CRQ, etc.)\n\nRetorne APENAS JSON válido com os campos: nicho, display_name, app_name, status (sempre 'ativo'), e os 14 componentes acima. Sem markdown, sem texto antes ou depois do JSON."
+            },
+            {
+              "name": "messages",
+              "value": "=[{ \"role\": \"user\", \"content\": \"Gere a Skill completa para o nicho: \" + JSON.stringify({ nicho: $json.nicho, display_name: $json.display_name, app_name: $json.app_name }) }]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "skill-factory-agent",
+      "name": "Skill Factory Agent (Anthropic)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 260],
+      "credentials": { "httpHeaderAuth": { "id": "anthropic-api-key", "name": "Anthropic API Key" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.item.json;\nconst text = response.content[0].text;\n\nlet skill;\ntry {\n  // Remove markdown code blocks se existirem\n  const cleaned = text.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  skill = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('Skill Factory retornou JSON inválido: ' + text.substring(0, 200));\n}\n\n// Garante status ativo\nskill.status = 'ativo';\nskill.gerado_em = new Date().toISOString();\nskill.gerado_por = 'skill-factory-agent';\nskill.versao = 1;\n\nreturn [{ json: skill }];"
+      },
+      "id": "parse-skill-json",
+      "name": "Parse JSON da Skill",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 260]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "upsert",
+        "tableId": "agent_skills",
+        "dataToSend": "autoMapInputData",
+        "matchingColumns": ["nicho"]
+      },
+      "id": "salvar-skill",
+      "name": "Salvar Skill no Supabase",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 260],
+      "credentials": { "supabaseApi": { "id": "supabase-nexoomnix", "name": "Supabase NexoOmnix" } },
+      "notes": "Upsert por nicho — entra como ativo diretamente, sem aprovação manual"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "create",
+        "tableId": "skill_generation_log",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "nicho", "fieldValue": "={{ $json.nicho }}" },
+            { "fieldId": "evento", "fieldValue": "gerado" },
+            { "fieldId": "detalhe", "fieldValue": "=Skill gerada e ativada automaticamente pelo Skill Factory Agent. Versão {{ $json.versao }}." }
+          ]
+        }
+      },
+      "id": "logar-geracao",
+      "name": "Log de Geração",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1780, 260],
+      "credentials": { "supabaseApi": { "id": "supabase-nexoomnix", "name": "Supabase NexoOmnix" } }
+    },
+    {
+      "parameters": {},
+      "id": "no-op",
+      "name": "Sem pendentes — encerrar",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (6h)": { "main": [[{ "node": "Buscar Nichos Pendentes", "type": "main", "index": 0 }]] },
+    "Buscar Nichos Pendentes": { "main": [[{ "node": "Tem pendentes?", "type": "main", "index": 0 }]] },
+    "Tem pendentes?": {
+      "main": [
+        [{ "node": "Para cada nicho", "type": "main", "index": 0 }],
+        [{ "node": "Sem pendentes — encerrar", "type": "main", "index": 0 }]
+      ]
+    },
+    "Para cada nicho": { "main": [[{ "node": "Skill Factory Agent (Anthropic)", "type": "main", "index": 0 }]] },
+    "Skill Factory Agent (Anthropic)": { "main": [[{ "node": "Parse JSON da Skill", "type": "main", "index": 0 }]] },
+    "Parse JSON da Skill": { "main": [[{ "node": "Salvar Skill no Supabase", "type": "main", "index": 0 }]] },
+    "Salvar Skill no Supabase": { "main": [[{ "node": "Log de Geração", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["nexoomnix", "skill-factory", "agents"]
+}

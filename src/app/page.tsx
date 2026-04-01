@@ -1,5 +1,8 @@
+export const dynamic = 'force-dynamic'
+
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { NexoOmnixLanding } from '@/components/home/NexoOmnixLanding'
 
 export default async function RootPage() {
   const supabase = await createClient()
@@ -7,7 +10,7 @@ export default async function RootPage() {
 
   if (user) {
     redirect('/dashboard')
-  } else {
-    redirect('/login')
   }
+
+  return <NexoOmnixLanding />
 }

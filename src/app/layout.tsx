@@ -1,15 +1,18 @@
 import type { Metadata } from 'next'
+import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: {
-    default: 'NexoPro',
-    template: '%s | NexoPro',
+    default: 'NexoOmnix — Plataforma completa para criar, automatizar e escalar',
+    template: '%s | NexoOmnix',
   },
-  description: 'Plataforma de gestão para pequenos negócios',
+  description: 'Omnix Agenda, Omnix CRM, Omnix Reels, Omnix Social e Omnix Sites. Tudo que o seu negócio precisa para crescer online.',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://nexoomnix.com'),
   robots: {
-    index: false,
-    follow: false,
+    index: true,
+    follow: true,
   },
 }
 
@@ -28,7 +31,11 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+        <SpeedInsights />
+      </body>
     </html>
   )
 }

@@ -171,7 +171,7 @@ export function NicheLandingPage({ tenant, settings, services }: NicheLandingPag
             Gestão profissional com tecnologia {niche.brandName}
           </p>
           <p className="text-sm text-gray-400 mt-2">
-            Powered by NexoPro
+            Powered by NexoOmnix
           </p>
         </div>
       </section>
@@ -216,7 +216,7 @@ export function NicheLandingPage({ tenant, settings, services }: NicheLandingPag
           <span>&copy; {new Date().getFullYear()} {tenant.name}. Todos os direitos reservados.</span>
           <span>
             Gerenciado com{' '}
-            <a href="https://nexopro.com.br" className="hover:text-gray-600 font-medium">NexoPro</a>
+            <a href="https://nexoomnix.com" className="hover:text-gray-600 font-medium">NexoOmnix</a>
           </span>
         </div>
       </footer>

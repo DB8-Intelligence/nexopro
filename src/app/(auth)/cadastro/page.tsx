@@ -5,33 +5,40 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Zap, Scissors, Wrench, Stethoscope, Scale, Home, PawPrint,
-  GraduationCap, Apple, HardHat, Camera,
+  GraduationCap, Apple, HardHat, Camera, UtensilsCrossed, Dumbbell, Calculator,
   CheckCircle2, ChevronRight, Loader2, Eye, EyeOff
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { NICHE_CONFIGS, PLANS, type NicheSlug } from '@/lib/niche-config'
 import { slugify } from '@/lib/utils'
 import type { PlanType } from '@/types/database'
+import { PersonaSelector } from '@/components/content-ai/PersonaSelector'
+import { getPersonaForNiche } from '@/lib/content-ai/content-personas'
+import type { PersonaId } from '@/lib/content-ai/content-personas'
 
-type Step = 'account' | 'niche' | 'business' | 'plan' | 'success'
+type Step = 'account' | 'niche' | 'business' | 'persona' | 'plan' | 'success'
 
 const NICHE_ICONS: Record<NicheSlug, React.ReactNode> = {
-  beleza:     <Scissors className="w-6 h-6" />,
-  tecnico:    <Wrench className="w-6 h-6" />,
-  saude:      <Stethoscope className="w-6 h-6" />,
-  juridico:   <Scale className="w-6 h-6" />,
-  imoveis:    <Home className="w-6 h-6" />,
-  pet:        <PawPrint className="w-6 h-6" />,
-  educacao:   <GraduationCap className="w-6 h-6" />,
-  nutricao:   <Apple className="w-6 h-6" />,
-  engenharia: <HardHat className="w-6 h-6" />,
-  fotografia: <Camera className="w-6 h-6" />,
+  beleza:      <Scissors className="w-6 h-6" />,
+  tecnico:     <Wrench className="w-6 h-6" />,
+  saude:       <Stethoscope className="w-6 h-6" />,
+  juridico:    <Scale className="w-6 h-6" />,
+  imoveis:     <Home className="w-6 h-6" />,
+  pet:         <PawPrint className="w-6 h-6" />,
+  educacao:    <GraduationCap className="w-6 h-6" />,
+  nutricao:    <Apple className="w-6 h-6" />,
+  engenharia:  <HardHat className="w-6 h-6" />,
+  fotografia:  <Camera className="w-6 h-6" />,
+  gastronomia: <UtensilsCrossed className="w-6 h-6" />,
+  fitness:     <Dumbbell className="w-6 h-6" />,
+  financas:    <Calculator className="w-6 h-6" />,
 }
 
 const STEPS: { id: Step; label: string }[] = [
   { id: 'account',  label: 'Conta' },
   { id: 'niche',    label: 'Nicho' },
   { id: 'business', label: 'Negócio' },
+  { id: 'persona',  label: 'Persona' },
   { id: 'plan',     label: 'Plano' },
 ]
 
@@ -54,6 +61,7 @@ export default function CadastroPage() {
     whatsapp: '',
     plan: 'trial' as PlanType,
   })
+  const [personaId, setPersonaId] = useState<PersonaId | null>(null)
   const [showPassword, setShowPassword] = useState(false)
 
   function update(field: string, value: string) {
@@ -81,6 +89,9 @@ export default function CadastroPage() {
 
   function handleNicheSelect(niche: NicheSlug) {
     update('niche', niche)
+    // Auto-suggest persona based on niche
+    const suggested = getPersonaForNiche(niche)
+    setPersonaId(suggested.id)
     setStep('business')
   }
 
@@ -89,7 +100,7 @@ export default function CadastroPage() {
   function handleBusinessSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!formData.businessName) return
-    setStep('plan')
+    setStep('persona')
   }
 
   // ─── Step 4: Plan + Create account ───────────────────────
@@ -133,6 +144,22 @@ export default function CadastroPage() {
 
       if (rpcError) throw new Error(rpcError.message)
 
+      // Save persona selection to tenant_settings if chosen
+      if (personaId) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('tenant_id')
+          .eq('id', authData.user.id)
+          .single()
+
+        if (profile?.tenant_id) {
+          await supabase
+            .from('tenant_settings')
+            .update({ content_persona_id: personaId })
+            .eq('tenant_id', profile.tenant_id)
+        }
+      }
+
       setStep('success')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar conta')
@@ -152,7 +179,7 @@ export default function CadastroPage() {
             <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
               <Zap className="w-4 h-4 text-white" />
             </div>
-            <span className="text-xl font-bold text-gray-900">NexoPro</span>
+            <span className="text-xl font-bold text-gray-900">NexoOmnix</span>
           </div>
         </div>
 
@@ -351,6 +378,39 @@ export default function CadastroPage() {
                 ← Voltar e trocar nicho
               </button>
             </form>
+          </div>
+        )}
+
+        {/* ── Step: Persona ── */}
+        {step === 'persona' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Persona de Conteúdo</h2>
+            <p className="text-gray-500 text-sm mb-4">
+              Escolha o estilo de conteúdo AI gerado para seu perfil. Você pode mudar depois.
+            </p>
+
+            <PersonaSelector
+              selected={personaId}
+              onSelect={setPersonaId}
+              onConfirm={() => setStep('plan')}
+              confirmLabel="Confirmar e escolher plano"
+            />
+
+            <button
+              type="button"
+              onClick={() => setStep('plan')}
+              className="w-full text-gray-400 hover:text-gray-600 text-sm py-2 mt-2"
+            >
+              Pular por agora
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStep('business')}
+              className="w-full text-gray-400 hover:text-gray-600 text-xs py-1"
+            >
+              ← Voltar
+            </button>
           </div>
         )}
 
