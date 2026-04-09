@@ -773,3 +773,12 @@ PROXIMA: configurar dominios customizados no Vercel (imobpro.app, salaopro.app, 
 - Stack IMUTAVEL: Next.js + Supabase + Vercel + Railway (db8-agent + n8n)
 
 Ultima atualizacao: Marco 2026
+
+## ViralObj (MVP Extraído)
+O módulo de Talking Objects foi extraído para um projeto independente:
+- Repositório: https://github.com/DB8-Intelligence/viralobj
+- Status: MVP independente em produção
+- Futuro: será reintegrado ao NexoOmnix como módulo quando o NexoOmnix estiver pronto
+
+NÃO duplicar desenvolvimento — qualquer melhoria em Talking Objects
+deve ser feita no repositório viralobj e importada de volta depois.
