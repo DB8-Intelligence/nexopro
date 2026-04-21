@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -63,6 +63,24 @@ export default function CadastroPage() {
   })
   const [personaId, setPersonaId] = useState<PersonaId | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+
+  // Se usuário já está autenticado e tem tenant, redireciona direto pro dashboard.
+  // Evita loop de onboarding pra quem volta pela URL /cadastro.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (cancelled || !session) return
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('tenant_id')
+        .eq('id', session.user.id)
+        .maybeSingle()
+      if (cancelled) return
+      if (profile?.tenant_id) router.replace('/dashboard')
+    })()
+    return () => { cancelled = true }
+  }, [supabase, router])
 
   function update(field: string, value: string) {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -128,19 +146,31 @@ export default function CadastroPage() {
       if (authError) throw new Error(authError.message)
       if (!authData.user) throw new Error('Erro ao criar usuário')
 
-      // 2. Chamar setup_tenant via RPC
-      const slug = slugify(formData.businessName)
-      const { error: rpcError } = await supabase.rpc('setup_tenant', {
-        p_user_id:   authData.user.id,
-        p_name:      formData.businessName,
-        p_slug:      slug,
-        p_niche:     formData.niche,
-        p_plan:      plan,
-        p_full_name: formData.fullName,
-        p_email:     formData.email,
-        p_phone:     formData.phone || null,
-        p_whatsapp:  formData.whatsapp || null,
-      })
+      // 2. Chamar setup_tenant via RPC com retry em caso de slug duplicado.
+      // 23505 = unique_violation no Postgres. Retenta até 5x com sufixo aleatório.
+      const baseSlug = slugify(formData.businessName)
+      let rpcError: { code?: string; message: string } | null = null
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const slug = attempt === 0
+          ? baseSlug
+          : `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`
+        const { error } = await supabase.rpc('setup_tenant', {
+          p_user_id:   authData.user.id,
+          p_name:      formData.businessName,
+          p_slug:      slug,
+          p_niche:     formData.niche,
+          p_plan:      plan,
+          p_full_name: formData.fullName,
+          p_email:     formData.email,
+          p_phone:     formData.phone || null,
+          p_whatsapp:  formData.whatsapp || null,
+        })
+        if (!error) { rpcError = null; break }
+        rpcError = error
+        const isUniqueViolation =
+          error.code === '23505' || error.message?.includes('tenants_slug_key')
+        if (!isUniqueViolation) break
+      }
 
       if (rpcError) throw new Error(rpcError.message)
 
