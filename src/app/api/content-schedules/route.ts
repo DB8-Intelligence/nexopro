@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
     days_of_week?: number[]
     hour_of_day?: number
     timezone?: string
+    format?: 'feed' | 'reel'
+    duration_sec?: 15 | 30 | 60
   }
 
   if (!body.name?.trim()) {
@@ -56,6 +58,8 @@ export async function POST(req: NextRequest) {
       days_of_week: body.days_of_week ?? [1, 3, 5],
       hour_of_day:  body.hour_of_day ?? 9,
       timezone:     body.timezone ?? 'America/Bahia',
+      format:       body.format ?? 'feed',
+      duration_sec: body.duration_sec ?? 15,
       is_active:    true,
       next_run_at:  new Date().toISOString(),
     })
