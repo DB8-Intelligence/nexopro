@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { Loader2, Sparkles, Play, Pause, Trash2, Plus } from 'lucide-react'
 
 type Frequency = 'daily' | '3x_week' | '5x_week' | 'weekly'
+type Format = 'feed' | 'reel'
+type Duration = 15 | 30 | 60
 
 interface Schedule {
   id: string
@@ -12,6 +14,8 @@ interface Schedule {
   frequency: Frequency
   hour_of_day: number
   timezone: string
+  format: Format
+  duration_sec: Duration
   is_active: boolean
   last_run_at: string | null
   next_run_at: string
@@ -34,6 +38,8 @@ export function AutopilotSchedulesPanel() {
     topic_hint: '',
     frequency: 'weekly' as Frequency,
     hour_of_day: 9,
+    format: 'feed' as Format,
+    duration_sec: 15 as Duration,
   })
 
   async function load() {
@@ -59,7 +65,7 @@ export function AutopilotSchedulesPanel() {
         body: JSON.stringify(form),
       })
       if (res.ok) {
-        setForm({ name: '', topic_hint: '', frequency: 'weekly', hour_of_day: 9 })
+        setForm({ name: '', topic_hint: '', frequency: 'weekly', hour_of_day: 9, format: 'feed', duration_sec: 15 })
         setShowForm(false)
         await load()
       }
@@ -97,6 +103,7 @@ export function AutopilotSchedulesPanel() {
         </div>
         {!showForm && (
           <button
+            type="button"
             onClick={() => setShowForm(true)}
             className="inline-flex items-center gap-2 px-3 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
           >
@@ -120,8 +127,37 @@ export function AutopilotSchedulesPanel() {
             rows={2}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
           />
+
+          {/* Formato + Duração */}
           <div className="grid grid-cols-2 gap-3">
             <select
+              title="Formato"
+              value={form.format}
+              onChange={e => setForm({ ...form, format: e.target.value as Format })}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+            >
+              <option value="feed">Post estático (feed)</option>
+              <option value="reel">Reel em vídeo</option>
+            </select>
+            {form.format === 'reel' ? (
+              <select
+                title="Duração do reel"
+                value={form.duration_sec}
+                onChange={e => setForm({ ...form, duration_sec: Number(e.target.value) as Duration })}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+              >
+                <option value={15}>15 segundos</option>
+                <option value={30}>30 segundos</option>
+                <option value={60}>60 segundos</option>
+              </select>
+            ) : (
+              <div className="px-3 py-2 text-xs text-gray-400 self-center">Reel gera vídeo com IA (plano Pro Plus+)</div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              title="Frequência"
               value={form.frequency}
               onChange={e => setForm({ ...form, frequency: e.target.value as Frequency })}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
@@ -132,6 +168,7 @@ export function AutopilotSchedulesPanel() {
               <option value="weekly">Semanal</option>
             </select>
             <select
+              title="Horário"
               value={form.hour_of_day}
               onChange={e => setForm({ ...form, hour_of_day: Number(e.target.value) })}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
@@ -143,12 +180,14 @@ export function AutopilotSchedulesPanel() {
           </div>
           <div className="flex gap-2 justify-end">
             <button
-              onClick={() => { setShowForm(false); setForm({ name: '', topic_hint: '', frequency: 'weekly', hour_of_day: 9 }) }}
+              type="button"
+              onClick={() => { setShowForm(false); setForm({ name: '', topic_hint: '', frequency: 'weekly', hour_of_day: 9, format: 'feed', duration_sec: 15 }) }}
               className="px-3 py-2 text-gray-600 text-sm"
             >
               Cancelar
             </button>
             <button
+              type="button"
               onClick={create}
               disabled={saving || !form.name.trim()}
               className="px-3 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
@@ -178,6 +217,9 @@ export function AutopilotSchedulesPanel() {
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${s.is_active ? 'bg-emerald-500' : 'bg-gray-300'}`} />
                   <span className="font-medium text-gray-900 truncate">{s.name}</span>
+                  <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${s.format === 'reel' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {s.format === 'reel' ? `Reel ${s.duration_sec}s` : 'Feed'}
+                  </span>
                 </div>
                 <div className="text-xs text-gray-500 mt-1">
                   {FREQUENCY_LABELS[s.frequency]} · {String(s.hour_of_day).padStart(2, '0')}:00
@@ -190,6 +232,7 @@ export function AutopilotSchedulesPanel() {
               </div>
               <div className="flex items-center gap-1 flex-shrink-0 ml-3">
                 <button
+                  type="button"
                   onClick={() => toggle(s)}
                   className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg"
                   title={s.is_active ? 'Pausar' : 'Ativar'}
@@ -197,6 +240,7 @@ export function AutopilotSchedulesPanel() {
                   {s.is_active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                 </button>
                 <button
+                  type="button"
                   onClick={() => remove(s)}
                   className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
                   title="Excluir"

@@ -17,6 +17,9 @@ export async function PATCH(req: NextRequest, ctx: Context) {
     hour_of_day?: number
     timezone?: string
     is_active?: boolean
+    format?: 'feed' | 'reel'
+    duration_sec?: 15 | 30 | 60
+    template_ids?: string[]
   }
 
   const updates: Record<string, unknown> = {}
@@ -27,6 +30,9 @@ export async function PATCH(req: NextRequest, ctx: Context) {
   if (body.hour_of_day !== undefined)  updates.hour_of_day = body.hour_of_day
   if (body.timezone !== undefined)     updates.timezone = body.timezone
   if (body.is_active !== undefined)    updates.is_active = body.is_active
+  if (body.format !== undefined)       updates.format = body.format
+  if (body.duration_sec !== undefined) updates.duration_sec = body.duration_sec
+  if (body.template_ids !== undefined) updates.template_ids = body.template_ids
 
   const { data, error } = await supabase
     .from('content_schedules')
