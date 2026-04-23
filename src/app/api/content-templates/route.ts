@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireTenant } from '@/modules/platform/tenants/tenant-context'
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
@@ -23,9 +24,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await requireTenant({
+    unauthorizedMessage: 'Unauthorized',
+    tenantMissingStatus: 400,
+    tenantMissingMessage: 'Profile sem tenant',
+  })
+  if (ctx instanceof NextResponse) return ctx
 
   const body = await req.json() as {
     name?: string
@@ -41,20 +45,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'name e image_url são obrigatórios' }, { status: 400 })
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.tenant_id) {
-    return NextResponse.json({ error: 'Profile sem tenant' }, { status: 400 })
-  }
-
+  const supabase = await createClient()
   const { data, error } = await supabase
     .from('content_templates')
     .insert({
-      tenant_id:   profile.tenant_id,
+      tenant_id:   ctx.tenantId,
       name:        body.name.trim(),
       description: body.description?.trim() || null,
       image_url:   body.image_url.trim(),

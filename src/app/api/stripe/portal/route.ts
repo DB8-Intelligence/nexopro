@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe'
+import { requireTenant } from '@/modules/platform/tenants/tenant-context'
 
 export async function POST(req: NextRequest) {
+  // No original, user autenticado sem tenant caía no 404
+  // "Nenhuma assinatura Stripe encontrada" pelo efeito colateral de
+  // query com tenant_id vazio. Preserva essa mensagem via override.
+  const ctx = await requireTenant({
+    tenantMissingMessage: 'Nenhuma assinatura Stripe encontrada',
+  })
+  if (ctx instanceof NextResponse) return ctx
+
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single()
-
   const { data: tenant } = await supabase
     .from('tenants')
     .select('stripe_customer_id')
-    .eq('id', profile?.tenant_id ?? '')
+    .eq('id', ctx.tenantId)
     .single()
 
   if (!tenant?.stripe_customer_id) {

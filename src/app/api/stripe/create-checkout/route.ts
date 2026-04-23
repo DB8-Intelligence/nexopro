@@ -1,31 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { stripe, PLAN_PRICE_IDS, PLAN_LABELS } from '@/lib/stripe'
+import { requireTenant } from '@/modules/platform/tenants/tenant-context'
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  const ctx = await requireTenant()
+  if (ctx instanceof NextResponse) return ctx
 
   const { plan } = await req.json() as { plan: string }
   const priceId = PLAN_PRICE_IDS[plan]
   if (!priceId) return NextResponse.json({ error: 'Plano inválido' }, { status: 400 })
 
-  // Get tenant data
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.tenant_id) {
-    return NextResponse.json({ error: 'Tenant não encontrado' }, { status: 404 })
-  }
-
+  const supabase = await createClient()
   const { data: tenant } = await supabase
     .from('tenants')
     .select('id, name, email, stripe_customer_id')
-    .eq('id', profile.tenant_id)
+    .eq('id', ctx.tenantId)
     .single()
 
   if (!tenant) return NextResponse.json({ error: 'Tenant não encontrado' }, { status: 404 })
@@ -37,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   if (!customerId) {
     const customer = await stripe.customers.create({
-      email: tenant.email ?? user.email ?? undefined,
+      email: tenant.email ?? ctx.user.email ?? undefined,
       name: tenant.name,
       metadata: { tenant_id: tenant.id },
     })
