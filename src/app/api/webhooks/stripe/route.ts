@@ -1,11 +1,27 @@
+/**
+ * Stripe webhook endpoint.
+ *
+ * Responsabilidades desta rota:
+ *   1. Ler o raw body + header `stripe-signature`
+ *   2. Validar assinatura via `stripe.webhooks.constructEvent`
+ *   3. Resolver objetos secundários via SDK quando necessário (ex: subscription
+ *      completa do `checkout.session.completed`)
+ *   4. Despachar dados já normalizados para o use case correspondente
+ *   5. Retornar 200 { received: true }
+ *
+ * Side effects de negócio (update de tenant, envio de email) vivem em
+ * `src/modules/billing/application/handle-*.ts`. O SDK do Stripe e a
+ * verificação de assinatura são INTENCIONALMENTE infra desta rota —
+ * protocolos de webhook são provider-específicos. Ver ADR-0002.
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
-import { stripe, planFromPriceId } from '@/lib/stripe'
-import {
-  sendPaymentFailedNotice,
-  sendSubscriptionWelcome,
-} from '@/modules/billing/application/send-billing-notification'
+import { stripe } from '@/lib/stripe'
 import type Stripe from 'stripe'
+import { handleCheckoutSessionCompleted } from '@/modules/billing/application/handle-checkout-session-completed'
+import { handleSubscriptionUpdated } from '@/modules/billing/application/handle-subscription-updated'
+import { handleSubscriptionDeleted } from '@/modules/billing/application/handle-subscription-deleted'
+import { handleInvoicePaymentFailed } from '@/modules/billing/application/handle-invoice-payment-failed'
 
 export async function POST(req: NextRequest) {
   const body = await req.text()
@@ -18,8 +34,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Webhook signature invalid' }, { status: 400 })
   }
 
-  const supabase = await createServiceClient()
-
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session
@@ -27,37 +41,22 @@ export async function POST(req: NextRequest) {
       const plan = session.metadata?.plan
       if (!tenantId || !plan) break
 
-      const subscription = session.subscription
+      const sub = session.subscription
         ? await stripe.subscriptions.retrieve(session.subscription as string)
         : null
 
-      await supabase
-        .from('tenants')
-        .update({
-          plan,
-          plan_expires_at: subscription?.cancel_at
-            ? new Date(subscription.cancel_at * 1000).toISOString()
-            : null,
-          stripe_subscription_id: subscription?.id ?? null,
-          stripe_price_id: subscription?.items.data[0]?.price.id ?? null,
-          cancel_at_period_end: subscription?.cancel_at_period_end ?? false,
-        })
-        .eq('id', tenantId)
-
-      // Send welcome email
-      const { data: tenant } = await supabase
-        .from('tenants')
-        .select('name, email')
-        .eq('id', tenantId)
-        .single()
-
-      if (tenant?.email) {
-        await sendSubscriptionWelcome({
-          to: tenant.email,
-          tenantName: tenant.name,
-          plan,
-        })
-      }
+      await handleCheckoutSessionCompleted({
+        tenantId,
+        plan,
+        subscription: sub
+          ? {
+              id: sub.id,
+              priceId: sub.items.data[0]?.price.id ?? null,
+              cancelAt: sub.cancel_at,
+              cancelAtPeriodEnd: sub.cancel_at_period_end,
+            }
+          : null,
+      })
       break
     }
 
@@ -66,19 +65,12 @@ export async function POST(req: NextRequest) {
       const tenantId = sub.metadata?.tenant_id
       if (!tenantId) break
 
-      const plan = planFromPriceId(sub.items.data[0]?.price.id ?? '')
-
-      await supabase
-        .from('tenants')
-        .update({
-          plan,
-          plan_expires_at: sub.cancel_at
-            ? new Date(sub.cancel_at * 1000).toISOString()
-            : null,
-          stripe_price_id: sub.items.data[0]?.price.id ?? null,
-          cancel_at_period_end: sub.cancel_at_period_end,
-        })
-        .eq('id', tenantId)
+      await handleSubscriptionUpdated({
+        tenantId,
+        priceId: sub.items.data[0]?.price.id ?? null,
+        cancelAt: sub.cancel_at,
+        cancelAtPeriodEnd: sub.cancel_at_period_end,
+      })
       break
     }
 
@@ -87,39 +79,18 @@ export async function POST(req: NextRequest) {
       const tenantId = sub.metadata?.tenant_id
       if (!tenantId) break
 
-      await supabase
-        .from('tenants')
-        .update({
-          plan: 'trial',
-          plan_expires_at: null,
-          stripe_subscription_id: null,
-          stripe_price_id: null,
-          cancel_at_period_end: false,
-        })
-        .eq('id', tenantId)
+      await handleSubscriptionDeleted({ tenantId })
       break
     }
 
     case 'invoice.payment_failed': {
       const invoice = event.data.object as Stripe.Invoice
-      const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id
-
+      const customerId =
+        typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id
       if (!customerId) break
 
-      const { data: tenant } = await supabase
-        .from('tenants')
-        .select('id, name, email')
-        .eq('stripe_customer_id', customerId)
-        .single()
-
-      if (tenant?.email) {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-        await sendPaymentFailedNotice({
-          to: tenant.email,
-          tenantName: tenant.name,
-          retryUrl: `${appUrl}/assinatura`,
-        })
-      }
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+      await handleInvoicePaymentFailed({ customerId, appUrl })
       break
     }
 
