@@ -20,6 +20,7 @@ Mantém sem alterar:
 | [Dockerfile](../../Dockerfile) | Multi-stage build (deps → builder → runner) sobre `node:20-slim`. Imagem ~200-250 MB. Listening em 0.0.0.0:8080. |
 | [.dockerignore](../../.dockerignore) | Exclui `.git`, `node_modules`, `.next`, `.env*`, docs, scripts ops, etc. |
 | [next.config.mjs](../../next.config.mjs) | `output: 'standalone'` adicionado (sem efeito em Vercel). |
+| [cloudbuild.yaml](../../cloudbuild.yaml) | Cloud Build config que faz `docker build --build-arg NEXT_PUBLIC_*=...` e empurra imagem para Artifact Registry. Necessário porque `gcloud run deploy --source --build-env-vars-file` não propaga build-args para Dockerfile (ver seção "Por que NÃO usar `--source .` direto"). |
 
 ### Por que `node:20-slim` e não `node:20-alpine`
 
@@ -96,70 +97,115 @@ CRON_SECRET
 SIMULATE_AI         # cost-control: true em dev, ausente/false em prod
 ```
 
-## Deploy no Cloud Run (Fase A2 — não executar agora)
+## Deploy no Cloud Run (Fase A2 — build separado + deploy por imagem)
+
+### Por que NÃO usar `gcloud run deploy --source .` direto
+
+Tentativa A2.2 inicial usou `gcloud run deploy --source . --build-env-vars-file=...`. **Falhou.** A flag `--build-env-vars-file` foi feita para Cloud Native Buildpacks e **não propaga as vars como `--build-arg` para Dockerfile builds**. Os `ARG NEXT_PUBLIC_*` no Dockerfile recebem `""`, Next.js embute `""` em `metadataBase` e similares, e o build morre em "Collecting page data" para `/_not-found` com `TypeError: Invalid URL (input: '')`.
+
+**Solução adotada:** [cloudbuild.yaml](../../cloudbuild.yaml) na raiz do repo executa `docker build --build-arg ...` explicitamente, e o deploy passa a referenciar a imagem buildada via `--image=...`. Build e deploy ficam separados, com responsabilidades claras.
+
+### Pré-requisitos
 
 ```bash
-# Pré-requisitos:
-# - gcloud CLI instalado e autenticado: `gcloud auth login`
-# - Projeto GCP criado e billing habilitado
-# - APIs habilitadas:
+# gcloud CLI instalado e autenticado: `gcloud auth login`
+# Projeto GCP com billing habilitado e APIs:
 gcloud services enable \
   run.googleapis.com \
   cloudbuild.googleapis.com \
   artifactregistry.googleapis.com \
   secretmanager.googleapis.com
+```
 
-# Variáveis
-PROJECT_ID="db8-nexoomnix"           # ajustar
+### Variáveis
+
+```bash
+PROJECT_ID="viralreel-ai-493701"     # smoke test compartilha projeto ViralObj; novo projeto db8-nexoomnix antes de A4
 REGION="us-central1"                 # ou southamerica-east1 (BR latência menor)
-SERVICE="nexoomnix-web"
+SERVICE="nexoomnix-web-smoke"        # smoke; production será "nexoomnix-web"
+```
 
-# 1. Salvar secrets em Secret Manager (uma vez por var)
-echo -n "$SUPABASE_SERVICE_ROLE_KEY" | \
-  gcloud secrets create supabase-service-role-key \
-    --project=$PROJECT_ID \
-    --replication-policy=automatic \
-    --data-file=-
+### Passo 1 — Build da imagem com Cloud Build
 
-# Repetir para cada server-side secret (ANTHROPIC_API_KEY, STRIPE_SECRET_KEY, etc)
+`NEXT_PUBLIC_*` viajam como **substitutions** para o `cloudbuild.yaml`, que repassa cada uma como `--build-arg` ao `docker build`. Carregue os valores do seu `.env.local` antes:
 
-# 2. Deploy via source build (Cloud Build constrói a imagem do Dockerfile)
+```bash
+set -a; source .env.local; set +a
+
+# ^||^ é o delimiter alternativo do gcloud — necessário porque JWT values
+# contêm vírgulas que quebrariam o parse do --substitutions= padrão.
+gcloud builds submit \
+  --config=cloudbuild.yaml \
+  --project=$PROJECT_ID \
+  --region=$REGION \
+  --substitutions=^||^_NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL"||_NEXT_PUBLIC_SUPABASE_ANON_KEY="$NEXT_PUBLIC_SUPABASE_ANON_KEY"||_NEXT_PUBLIC_APP_URL="https://nexoomnix.com"||_NEXT_PUBLIC_APP_NAME="NexoOmnix"||_NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"
+```
+
+Output: imagem em `us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/nexoomnix-web:latest` (e tag `:$BUILD_ID` única).
+
+### Passo 2 — Deploy do Cloud Run referenciando a imagem
+
+```bash
+# (Opcional) Criar/popular runtime.yaml fora do repo com server-side secrets.
+# NUNCA commitar — usar diretório /tmp ou similar:
+TMPYAML=$(mktemp)
+cat > "$TMPYAML" <<EOF
+SUPABASE_SERVICE_ROLE_KEY: "$SUPABASE_SERVICE_ROLE_KEY"
+ANTHROPIC_API_KEY: "$ANTHROPIC_API_KEY"
+DB8_AGENT_URL: "$DB8_AGENT_URL"
+N8N_WEBHOOK_TOKEN: "$N8N_WEBHOOK_TOKEN"
+N8N_BASE_URL: "$N8N_BASE_URL"
+STRIPE_SECRET_KEY: "$STRIPE_SECRET_KEY"
+STRIPE_WEBHOOK_SECRET: "$STRIPE_WEBHOOK_SECRET"
+RESEND_API_KEY: "$RESEND_API_KEY"
+FAL_KEY: "$FAL_KEY"
+ELEVENLABS_API_KEY: "$ELEVENLABS_API_KEY"
+OPENAI_TTS_KEY: "$OPENAI_TTS_KEY"
+REPLICATE_API_KEY: "$REPLICATE_API_KEY"
+NODE_ENV: "production"
+NEXT_TELEMETRY_DISABLED: "1"
+EOF
+
 gcloud run deploy $SERVICE \
-  --source . \
+  --image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/nexoomnix-web:latest \
   --project=$PROJECT_ID \
   --region=$REGION \
   --allow-unauthenticated \
   --memory=1Gi \
   --cpu=1 \
   --min-instances=0 \
-  --max-instances=10 \
+  --max-instances=2 \
   --port=8080 \
   --timeout=300 \
-  --build-env-vars-file=.cloud-run-build-env.yaml \
-  --set-env-vars="NODE_ENV=production,NEXT_TELEMETRY_DISABLED=1" \
-  --update-secrets="SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest"
-  # ... + demais secrets
+  --env-vars-file="$TMPYAML"
 
-# 3. Capturar URL provisória
+rm -f "$TMPYAML"
+```
+
+### Passo 3 — Capturar URL provisória
+
+```bash
 gcloud run services describe $SERVICE \
   --project=$PROJECT_ID \
   --region=$REGION \
   --format='value(status.url)'
 
-# Output esperado: https://nexoomnix-web-xxxxxxxxxx-uc.a.run.app
+# Output esperado: https://nexoomnix-web-smoke-xxxxxxxxxx-uc.a.run.app
 ```
 
-### Arquivo `.cloud-run-build-env.yaml` (NÃO commitado — local)
+### Migração para Secret Manager (obrigatório antes de A4)
 
-```yaml
-NEXT_PUBLIC_SUPABASE_URL: "https://pclqjwegljrglaslppag.supabase.co"
-NEXT_PUBLIC_SUPABASE_ANON_KEY: "..."
-NEXT_PUBLIC_APP_URL: "https://nexoomnix.com"
-NEXT_PUBLIC_APP_NAME: "NexoOmnix"
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_live_..."
+Para A4 (DNS swap), todos os secrets de runtime devem migrar de `--env-vars-file` para Secret Manager. Para cada server-side var:
+
+```bash
+echo -n "$SUPABASE_SERVICE_ROLE_KEY" | \
+  gcloud secrets create supabase-service-role-key \
+    --project=$PROJECT_ID \
+    --replication-policy=automatic \
+    --data-file=-
 ```
 
-> Adicionar `.cloud-run-build-env.yaml` ao `.gitignore` antes de criar.
+E referenciar no deploy via `--update-secrets="SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest,..."`.
 
 ## Cuidados conhecidos
 

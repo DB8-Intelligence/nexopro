@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     template: '%s | NexoOmnix',
   },
   description: 'Omnix Agenda, Omnix CRM, Omnix Reels, Omnix Social e Omnix Sites. Tudo que o seu negócio precisa para crescer online.',
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://nexoomnix.com'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://nexoomnix.com'),
   robots: {
     index: true,
     follow: true,
