@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
+import { requireTenantWithRow } from '@/modules/platform/tenants/tenant-context'
+import {
+  FeatureNotAvailableError,
+  RateLimitExceededError,
+  guardAICall,
+} from '@/modules/platform/ai-cost-control'
 
 export const maxDuration = 60
 
@@ -273,30 +279,42 @@ Voz: "[CTA falado]"
 // ─── Main route ───────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  const ctx = await requireTenantWithRow({ unauthorizedMessage: 'Unauthorized' })
+  if (ctx instanceof NextResponse) return ctx
 
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const plan = ctx.tenant.plan
+  const tenantNiche = ctx.tenant.niche
 
-  // Plan check: pro and above
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('tenant:tenants(plan, niche)')
-    .eq('id', user.id)
-    .single()
-
-  const tenant = profile?.tenant as { plan?: string; niche?: string } | null
-  const plan = tenant?.plan ?? ''
-  const tenantNiche = tenant?.niche ?? ''
-
-  if (!plan || ['trial', 'starter'].includes(plan)) {
+  // Plan gate específico desta rota: pro e superior
+  if (['trial', 'starter'].includes(plan)) {
     return NextResponse.json(
       { error: 'Esta funcionalidade requer o plano Pro ou superior.' },
       { status: 403 }
     )
   }
+
+  // Cost control: rate limit + simulate
+  let simulate: boolean
+  try {
+    ;({ simulate } = await guardAICall({
+      tenantId: ctx.tenantId,
+      plan: ctx.tenant.plan,
+      type: 'text',
+    }))
+  } catch (err) {
+    if (err instanceof FeatureNotAvailableError) {
+      return NextResponse.json({ error: 'Análise de vídeo não disponível no seu plano' }, { status: 403 })
+    }
+    if (err instanceof RateLimitExceededError) {
+      return NextResponse.json(
+        { error: `Limite diário de análise atingido (${err.limit}/dia). Tente novamente mais tarde.` },
+        { status: 429 },
+      )
+    }
+    throw err
+  }
+
+  const supabase = await createClient()
 
   // Parse body — supports JSON (URL) or multipart (file upload)
   let url = ''
@@ -342,6 +360,31 @@ export async function POST(req: NextRequest) {
 
   if (!url || url === 'upload://') {
     return NextResponse.json({ error: 'URL ou arquivo de vídeo obrigatório' }, { status: 400 })
+  }
+
+  // ── Simulate mode: bypass toda a pipeline (frame extract + Anthropic) ──
+  if (simulate) {
+    const encoder = new TextEncoder()
+    const simulatedStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(
+          '# Análise de vídeo (modo simulação)\n\n' +
+          '**SIMULATE_AI=true** — chamadas externas (frame extraction + Anthropic) ignoradas para controle de custo.\n\n' +
+          '## Hook\nSimulação de hook viral.\n\n' +
+          '## Pacing\nSimulação de pacing.\n\n' +
+          '## CTA\nSimulação de CTA.\n',
+        ))
+        controller.close()
+      },
+    })
+    return new NextResponse(simulatedStream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'X-Platform': 'simulate',
+        'X-Has-Frames': 'false',
+        'X-AI-Simulate': 'true',
+      },
+    })
   }
 
   // ── Detect platform and extract metadata ──

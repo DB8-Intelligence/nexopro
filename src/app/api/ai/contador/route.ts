@@ -3,6 +3,12 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { AI_CONFIG, buildContadorSystemPrompt, type ContadorMessage } from '@/lib/ai'
 import { requireTenantWithRow } from '@/modules/platform/tenants/tenant-context'
+import {
+  FeatureNotAvailableError,
+  RateLimitExceededError,
+  guardAICall,
+  mockTextResponse,
+} from '@/modules/platform/ai-cost-control'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -44,12 +50,33 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Rate limit
+  // Rate limit (per-minute, in-memory — complementar ao rate limit diário do guard)
   if (!checkRateLimit(ctx.tenantId)) {
     return NextResponse.json(
       { error: 'Limite de 10 perguntas por minuto atingido' },
       { status: 429 }
     )
+  }
+
+  // Cost control: feature gate + rate limit diário + simulate
+  let simulate: boolean
+  try {
+    ;({ simulate } = await guardAICall({
+      tenantId: ctx.tenantId,
+      plan: ctx.tenant.plan,
+      type: 'text',
+    }))
+  } catch (err) {
+    if (err instanceof FeatureNotAvailableError) {
+      return NextResponse.json({ error: 'IA Contador não disponível no seu plano' }, { status: 403 })
+    }
+    if (err instanceof RateLimitExceededError) {
+      return NextResponse.json(
+        { error: `Limite diário de IA atingido (${err.limit}/dia). Tente novamente mais tarde.` },
+        { status: 429 },
+      )
+    }
+    throw err
   }
 
   const body = await request.json() as { messages: ContadorMessage[] }
@@ -104,6 +131,10 @@ export async function POST(request: NextRequest) {
     overdueReceivables: overdue,
     cashBalance: balance,
   })
+
+  if (simulate) {
+    return NextResponse.json({ message: mockTextResponse('Resposta IA Contador') })
+  }
 
   try {
     const response = await anthropic.messages.create({

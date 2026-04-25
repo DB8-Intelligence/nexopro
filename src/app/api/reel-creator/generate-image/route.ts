@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireTenantWithRow } from '@/modules/platform/tenants/tenant-context'
+import {
+  FeatureNotAvailableError,
+  RateLimitExceededError,
+  guardAICall,
+  mockImageUrl,
+} from '@/modules/platform/ai-cost-control'
 
 interface FalResponse {
   images: { url: string; width: number; height: number; content_type: string }[]
@@ -7,9 +13,28 @@ interface FalResponse {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  const ctx = await requireTenantWithRow()
+  if (ctx instanceof NextResponse) return ctx
+
+  let simulate: boolean
+  try {
+    ;({ simulate } = await guardAICall({
+      tenantId: ctx.tenantId,
+      plan: ctx.tenant.plan,
+      type: 'image',
+    }))
+  } catch (err) {
+    if (err instanceof FeatureNotAvailableError) {
+      return NextResponse.json({ error: 'Geração de imagens não disponível no seu plano' }, { status: 403 })
+    }
+    if (err instanceof RateLimitExceededError) {
+      return NextResponse.json(
+        { error: `Limite diário de imagens atingido (${err.limit}/dia). Tente novamente mais tarde.` },
+        { status: 429 },
+      )
+    }
+    throw err
+  }
 
   const { prompt, scene, characterDna } = await req.json() as {
     prompt: string
@@ -21,7 +46,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Prompt obrigatório' }, { status: 400 })
   }
 
-  // Prepend character DNA so all scene images share the same character
+  if (simulate) {
+    return NextResponse.json({ url: mockImageUrl(576, 1024), seed: 0, scene })
+  }
+
   const finalPrompt = characterDna?.trim()
     ? `${characterDna.trim()}, ${prompt.trim()}`
     : prompt.trim()
@@ -40,7 +68,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         prompt: finalPrompt,
-        image_size: { width: 576, height: 1024 }, // 9:16 vertical
+        image_size: { width: 576, height: 1024 },
         num_inference_steps: 4,
         num_images: 1,
         enable_safety_checker: false,
