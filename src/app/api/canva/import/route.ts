@@ -7,13 +7,17 @@ import { randomUUID } from 'crypto'
 import { createClient } from '@/lib/supabase/server'
 import { getActiveCanvaToken } from '@/lib/canva/token'
 import { createExport, waitForExport } from '@/lib/canva/client'
+import { requireTenant } from '@/modules/platform/tenants/tenant-context'
 
 export const maxDuration = 90
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await requireTenant({
+    unauthorizedMessage: 'Unauthorized',
+    tenantMissingStatus: 400,
+    tenantMissingMessage: 'Profile sem tenant',
+  })
+  if (ctx instanceof NextResponse) return ctx
 
   const body = await req.json() as {
     design_id?: string
@@ -27,17 +31,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'design_id é obrigatório' }, { status: 400 })
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.tenant_id) {
-    return NextResponse.json({ error: 'Profile sem tenant' }, { status: 400 })
-  }
-
-  const tokenInfo = await getActiveCanvaToken(supabase, profile.tenant_id)
+  const supabase = await createClient()
+  const tokenInfo = await getActiveCanvaToken(supabase, ctx.tenantId)
   if (!tokenInfo) {
     return NextResponse.json({ error: 'Canva não conectado', needsReconnect: true }, { status: 401 })
   }
@@ -71,7 +66,7 @@ export async function POST(req: NextRequest) {
   }
 
   const safeName = (body.design_title ?? body.design_id).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64)
-  const storagePath = `templates/${profile.tenant_id}/canva-${randomUUID()}-${safeName}.png`
+  const storagePath = `templates/${ctx.tenantId}/canva-${randomUUID()}-${safeName}.png`
 
   const { error: uploadError } = await supabase
     .storage
@@ -91,7 +86,7 @@ export async function POST(req: NextRequest) {
   const { data: template, error: insertError } = await supabase
     .from('content_templates')
     .insert({
-      tenant_id:       profile.tenant_id,
+      tenant_id:       ctx.tenantId,
       name:            body.design_title?.trim() || `Canva ${body.design_id.slice(0, 6)}`,
       image_url:       publicUrlData.publicUrl,
       format:          body.format ?? 'feed',

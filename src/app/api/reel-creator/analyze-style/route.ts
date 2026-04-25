@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { requireTenantWithRow } from '@/modules/platform/tenants/tenant-context'
+import {
+  FeatureNotAvailableError,
+  RateLimitExceededError,
+  guardAICall,
+} from '@/modules/platform/ai-cost-control'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -15,9 +20,28 @@ interface StyleAnalysis {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  const ctx = await requireTenantWithRow()
+  if (ctx instanceof NextResponse) return ctx
+
+  let simulate: boolean
+  try {
+    ;({ simulate } = await guardAICall({
+      tenantId: ctx.tenantId,
+      plan: ctx.tenant.plan,
+      type: 'text',
+    }))
+  } catch (err) {
+    if (err instanceof FeatureNotAvailableError) {
+      return NextResponse.json({ error: 'Análise de IA não disponível no seu plano' }, { status: 403 })
+    }
+    if (err instanceof RateLimitExceededError) {
+      return NextResponse.json(
+        { error: `Limite diário de análise atingido (${err.limit}/dia). Tente novamente mais tarde.` },
+        { status: 429 },
+      )
+    }
+    throw err
+  }
 
   const formData = await req.formData()
   const file = formData.get('image') as File | null
@@ -27,6 +51,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Formato inválido. Use JPG, PNG ou WEBP.' }, { status: 400 })
   if (file.size > 10 * 1024 * 1024)
     return NextResponse.json({ error: 'Imagem muito grande. Máximo 10MB.' }, { status: 400 })
+
+  if (simulate) {
+    return NextResponse.json({
+      stylePrompt: 'cinematic 9:16 vertical, soft warm lighting, vibrant tones (simulação)',
+      colorPalette: 'cores neutras simuladas',
+      mood: 'energético (simulação)',
+      composition: 'close-up vertical (simulação)',
+    })
+  }
 
   const bytes = await file.arrayBuffer()
   const base64 = Buffer.from(bytes).toString('base64')

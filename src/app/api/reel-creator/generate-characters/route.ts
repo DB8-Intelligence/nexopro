@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireTenantWithRow } from '@/modules/platform/tenants/tenant-context'
+import {
+  FeatureNotAvailableError,
+  RateLimitExceededError,
+  guardAICall,
+  mockImageUrl,
+} from '@/modules/platform/ai-cost-control'
 
 interface FalResponse {
   images: { url: string }[]
@@ -40,9 +46,28 @@ async function generateOne(prompt: string, falKey: string): Promise<CharacterIma
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  const ctx = await requireTenantWithRow()
+  if (ctx instanceof NextResponse) return ctx
+
+  let simulate: boolean
+  try {
+    ;({ simulate } = await guardAICall({
+      tenantId: ctx.tenantId,
+      plan: ctx.tenant.plan,
+      type: 'image',
+    }))
+  } catch (err) {
+    if (err instanceof FeatureNotAvailableError) {
+      return NextResponse.json({ error: 'Geração de imagens não disponível no seu plano' }, { status: 403 })
+    }
+    if (err instanceof RateLimitExceededError) {
+      return NextResponse.json(
+        { error: `Limite diário de imagens atingido (${err.limit}/dia). Tente novamente mais tarde.` },
+        { status: 429 },
+      )
+    }
+    throw err
+  }
 
   const { prompts } = await req.json() as { prompts: string[] }
 
@@ -50,10 +75,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Envie 1–6 prompts.' }, { status: 400 })
   }
 
+  if (simulate) {
+    const images = prompts.map(() => ({ url: mockImageUrl(576, 1024), error: null }))
+    return NextResponse.json({ images })
+  }
+
   const falKey = process.env.FAL_KEY
   if (!falKey) return NextResponse.json({ error: 'FAL_KEY não configurada' }, { status: 500 })
 
-  // Generate all in parallel
   const images = await Promise.all(prompts.map(p => generateOne(p, falKey)))
 
   return NextResponse.json({ images })

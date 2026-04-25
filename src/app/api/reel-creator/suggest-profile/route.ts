@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import Anthropic from '@anthropic-ai/sdk'
 import {
   CONTENT_PERSONAS,
   generateBioSuggestion,
 } from '@/lib/content-ai/content-personas'
 import type { PersonaId } from '@/lib/content-ai/content-personas'
+import { requireTenantWithRow } from '@/modules/platform/tenants/tenant-context'
+import {
+  FeatureNotAvailableError,
+  RateLimitExceededError,
+  guardAICall,
+} from '@/modules/platform/ai-cost-control'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -19,9 +24,28 @@ interface ProfileSuggestion {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  const ctx = await requireTenantWithRow()
+  if (ctx instanceof NextResponse) return ctx
+
+  let simulate: boolean
+  try {
+    ;({ simulate } = await guardAICall({
+      tenantId: ctx.tenantId,
+      plan: ctx.tenant.plan,
+      type: 'text',
+    }))
+  } catch (err) {
+    if (err instanceof FeatureNotAvailableError) {
+      return NextResponse.json({ error: 'Sugestão de perfil não disponível no seu plano' }, { status: 403 })
+    }
+    if (err instanceof RateLimitExceededError) {
+      return NextResponse.json(
+        { error: `Limite diário de IA atingido (${err.limit}/dia). Tente novamente mais tarde.` },
+        { status: 429 },
+      )
+    }
+    throw err
+  }
 
   const body = await req.json() as {
     personaId: PersonaId
@@ -54,6 +78,19 @@ export async function POST(req: NextRequest) {
     ...persona.hashtagStrategy.secondary,
     ...persona.hashtagStrategy.niche,
   ].slice(0, 15)
+
+  if (simulate) {
+    // Fallback puro (sem Claude) — mesmo shape que o catch da chamada real
+    const suggestion: ProfileSuggestion = {
+      bio: bioBase,
+      ctaOptions: persona.ctaOptions,
+      hashtagsPost: allHashtags,
+      contentPillars: persona.contentPillars,
+      captionHooks: persona.captionHooks,
+      postingSchedule: 'Poste 3-5x por semana, preferencialmente entre 18h-21h (modo simulação)',
+    }
+    return NextResponse.json({ persona: { id: persona.id, name: persona.name, emoji: persona.emoji }, suggestion })
+  }
 
   // Use Claude to personalise and enhance the bio
   const contextParts = [

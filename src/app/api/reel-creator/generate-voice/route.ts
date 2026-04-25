@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireTenantWithRow } from '@/modules/platform/tenants/tenant-context'
+import {
+  FeatureNotAvailableError,
+  RateLimitExceededError,
+  guardAICall,
+} from '@/modules/platform/ai-cost-control'
 
 // OpenAI TTS voices available
 export type TTSVoice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'
@@ -13,6 +18,12 @@ const VOICE_LABELS: Record<TTSVoice, string> = {
   shimmer: 'Shimmer (suave)',
 }
 
+// Quando SIMULATE_AI=true, devolvemos um buffer mínimo (sync MP3 frame).
+// Não toca audio real, mas a rota retorna 200 com Content-Type: audio/mpeg
+// preservando o contrato. Frontend que tenta tocar simplesmente falha
+// silenciosamente — comportamento aceitável em modo simulação.
+const SILENT_MP3_PLACEHOLDER = new Uint8Array([0xff, 0xfb, 0x00, 0x00])
+
 export async function GET() {
   return NextResponse.json({
     voices: Object.entries(VOICE_LABELS).map(([id, label]) => ({ id, label })),
@@ -20,13 +31,27 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  const ctx = await requireTenantWithRow()
+  if (ctx instanceof NextResponse) return ctx
 
-  const ttsKey = process.env.OPENAI_TTS_KEY
-  if (!ttsKey) {
-    return NextResponse.json({ error: 'OPENAI_TTS_KEY não configurada' }, { status: 500 })
+  let simulate: boolean
+  try {
+    ;({ simulate } = await guardAICall({
+      tenantId: ctx.tenantId,
+      plan: ctx.tenant.plan,
+      type: 'tts',
+    }))
+  } catch (err) {
+    if (err instanceof FeatureNotAvailableError) {
+      return NextResponse.json({ error: 'Geração de voz não disponível no seu plano' }, { status: 403 })
+    }
+    if (err instanceof RateLimitExceededError) {
+      return NextResponse.json(
+        { error: `Limite diário de TTS atingido (${err.limit}/dia). Tente novamente mais tarde.` },
+        { status: 429 },
+      )
+    }
+    throw err
   }
 
   const { script, voice = 'nova', speed = 1.0 } = await req.json() as {
@@ -37,6 +62,22 @@ export async function POST(req: NextRequest) {
 
   if (!script?.trim()) {
     return NextResponse.json({ error: 'Script obrigatório' }, { status: 400 })
+  }
+
+  if (simulate) {
+    return new NextResponse(SILENT_MP3_PLACEHOLDER, {
+      headers: {
+        'Content-Type': 'audio/mpeg',
+        'Content-Disposition': 'inline; filename="narration-simulated.mp3"',
+        'Cache-Control': 'no-store',
+        'X-AI-Simulate': 'true',
+      },
+    })
+  }
+
+  const ttsKey = process.env.OPENAI_TTS_KEY
+  if (!ttsKey) {
+    return NextResponse.json({ error: 'OPENAI_TTS_KEY não configurada' }, { status: 500 })
   }
 
   // Truncate to ~4000 chars to stay within TTS limits (~5min audio)
@@ -63,7 +104,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `OpenAI TTS: ${errText}` }, { status: 502 })
     }
 
-    // Stream the mp3 binary back to the client
     const audioBuffer = await res.arrayBuffer()
 
     return new NextResponse(audioBuffer, {

@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { randomUUID } from 'crypto'
+import { requireTenant } from '@/modules/platform/tenants/tenant-context'
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
@@ -18,9 +19,12 @@ const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/g
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await requireTenant({
+    unauthorizedMessage: 'Unauthorized',
+    tenantMissingStatus: 400,
+    tenantMissingMessage: 'Profile sem tenant',
+  })
+  if (ctx instanceof NextResponse) return ctx
 
   const formData = await req.formData()
   const file = formData.get('file')
@@ -32,16 +36,6 @@ export async function POST(req: NextRequest) {
   }
   if (!ALLOWED_TYPES.has(file.type)) {
     return NextResponse.json({ error: 'Formato não suportado (use PNG, JPG, WEBP ou GIF)' }, { status: 400 })
-  }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.tenant_id) {
-    return NextResponse.json({ error: 'Profile sem tenant' }, { status: 400 })
   }
 
   const name      = (formData.get('name') as string | null)?.trim() || file.name
@@ -56,7 +50,9 @@ export async function POST(req: NextRequest) {
 
   // Sanitize filename: só letras/números/- / . / _
   const safeBase = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64)
-  const storagePath = `templates/${profile.tenant_id}/${randomUUID()}-${safeBase}`
+  const storagePath = `templates/${ctx.tenantId}/${randomUUID()}-${safeBase}`
+
+  const supabase = await createClient()
 
   const arrayBuffer = await file.arrayBuffer()
   const { error: uploadError } = await supabase
@@ -83,7 +79,7 @@ export async function POST(req: NextRequest) {
   const { data: template, error: insertError } = await supabase
     .from('content_templates')
     .insert({
-      tenant_id:   profile.tenant_id,
+      tenant_id:   ctx.tenantId,
       name,
       description,
       image_url:   imageUrl,

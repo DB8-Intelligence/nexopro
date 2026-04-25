@@ -4,29 +4,23 @@
 
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
 import { buildAuthorizeUrl, generatePkcePair } from '@/lib/canva/client'
+import { requireTenant } from '@/modules/platform/tenants/tenant-context'
 
 export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await requireTenant({
+    unauthorizedMessage: 'Unauthorized',
+    tenantMissingStatus: 400,
+    tenantMissingMessage: 'Profile sem tenant',
+  })
+  if (ctx instanceof NextResponse) return ctx
 
   if (!process.env.CANVA_CLIENT_ID || !process.env.CANVA_CLIENT_SECRET) {
     return NextResponse.json(
       { error: 'Canva OAuth não configurado. Configure CANVA_CLIENT_ID e CANVA_CLIENT_SECRET.' },
       { status: 500 },
     )
-  }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.tenant_id) {
-    return NextResponse.json({ error: 'Profile sem tenant' }, { status: 400 })
   }
 
   const state = randomBytes(24).toString('base64url')
@@ -37,8 +31,8 @@ export async function GET() {
   const service = await createServiceClient()
   await service.from('canva_oauth_states').insert({
     state,
-    tenant_id:     profile.tenant_id,
-    user_id:       user.id,
+    tenant_id:     ctx.tenantId,
+    user_id:       ctx.user.id,
     code_verifier: verifier,
   })
 
