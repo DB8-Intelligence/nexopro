@@ -82,23 +82,38 @@ Cloud Functions Gen 2 roda em cima de Cloud Run, mas a interface é diferente:
 
 ---
 
-### 3. `create-tenant` (HTTP callable)
+### 3. `create-tenant` (HTTP callable) ✅ IMPLEMENTADA
 
-**Tipo:** Cloud Function — `functions.https.onCall(handler)` (ou Cloud Run com auth manual)
+**Tipo:** Cloud Function **Gen 1** HTTPS callable — [`functions/src/tenants/create-tenant.ts`](../../functions/src/tenants/create-tenant.ts)
 
-**Propósito:** orquestrar onboarding atômico — criar tenant + reservar slug + criar membership owner — em transaction.
+**Propósito:** orquestrar onboarding atômico — criar tenant + reservar slug + criar membership owner — em transaction. Suporta múltiplos tenants por user.
 
 | Aspecto | Detalhe |
 |---|---|
-| **Inputs** | `{ name, slug, niche, whatsappNumber?, plan? }` (validar com Zod); `request.auth.uid` injetado |
-| **Reads** (em txn) | `slugs/{slug}` (verificar disponibilidade) |
-| **Writes** (em txn) | `slugs/{slug}` create · `tenants/{tid}` create · `memberships/{uid}__{tid}` create · `audit_logs/{lid}` create |
-| **Pós-txn** | trigger #2 (`memberships-on-write`) sincroniza claims automaticamente |
-| **Idempotência** | parcial — se mesmo slug for tentado 2× simultaneamente, transação falha em uma delas com `slug taken`. Cliente deve tratar erro |
-| **Retry** | client-side: usuário pode tentar de novo se conexão cair. Server: sem retry automático para callable (chamada explícita) |
-| **Riscos** | (a) Slug taken é UX-impactante; cliente deve check disponibilidade pré-call (`slugs/{slug}` permite read autenticado). (b) Custom claims só ficam ativos após `getIdToken(true)` no client — fluxo precisa esperar antes de redirect |
-| **Latência aceitável** | <3s p95 (impacta UX de onboarding) |
-| **Decisão** | **Cloud Function callable** (auth Firebase nativa, ergonomia client-side via SDK) |
+| **Inputs** | `{ tenantName, slug, niche? }` validados (regex slug, enum niche, length tenantName); `context.auth.uid` injetado |
+| **Reads** (em txn) | `slugs/{slug}` (uniqueness) · `users/{uid}` (verificar `defaultTenantId`) |
+| **Writes** (em txn) | `slugs/{slug}` create · `tenants/{tid}` create · `memberships/{uid}__{tid}` create · `users/{uid}` update (`defaultTenantId` apenas se for primeiro tenant) · `audit_logs/log_{date}_{nanoid}` create |
+| **Outputs** | `{ tenantId, membershipId, isFirstTenant }` |
+| **Múltiplos tenants** | Permitidos. Cada chamada cria novo tenant + membership com `role=owner`. Apenas o primeiro define `users/{uid}.defaultTenantId`; chamadas seguintes preservam o default. |
+| **Pós-txn** | trigger #2 (`memberships-on-write`) sincroniza custom claims automaticamente |
+| **Idempotência** | parcial — slug duplicado retorna `HttpsError('already-exists', ...)`. Mesma chamada com slug diferente cria outro tenant (intencional). |
+| **Retry** | client-side: tentar de novo se conexão cair. Server: sem retry automático para callable (chamada explícita) |
+| **Riscos** | (a) Slug taken é UX-impactante; cliente deve check disponibilidade pré-call (`slugs/{slug}` permite read autenticado quando rules forem evoluídas). (b) Custom claims só ficam ativos após `getIdToken(true)` no client — fluxo precisa esperar antes de redirect. (c) `users/{uid}` deve já existir (criado por `authOnCreate`) — handler retorna `failed-precondition` se ainda não foi criado. |
+| **Latência observada** | ~3-5s end-to-end no smoke test |
+| **Decisão** | **Cloud Function Gen 1 callable** (consistência com gotcha #3 do CLAUDE.md — Gen 2 callable via gcloud também é viável, mas mantive Gen 1 para padronizar) |
+
+**Como chamar via REST direto** (sem Firebase Web SDK):
+
+```bash
+curl -X POST "https://us-central1-db8-nexoomnix.cloudfunctions.net/createTenant" \
+  -H "Authorization: Bearer <Firebase ID Token>" \
+  -H "Content-Type: application/json" \
+  -d '{"data":{"tenantName":"Salão Bella","slug":"salao-bella","niche":"beleza"}}'
+
+# Response: { "result": { "tenantId": "tnt_...", "membershipId": "...__...", "isFirstTenant": true } }
+```
+
+Para obter o ID Token sem Web App registrado: `POST https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=<Browser API key>` (key auto-criada pelo Firebase em `addFirebase`, recuperada via `gcloud services api-keys get-key-string`).
 
 ---
 
@@ -324,17 +339,18 @@ await db.runTransaction(async (txn) => {
 5. Smoke test: criar Firebase Auth user manualmente via Console → verificar `users/{uid}` aparece em Firestore
 6. Cloud Logging entry sample: `→ [auth-on-create] uid=abc123 created users doc`
 
-### Ordem sugerida das demais
+### Status de implementação
 
-| # | Função | Bloqueia / habilita |
-|---|---|---|
-| 2 | `memberships-on-write` | Habilita custom claims funcionarem; é pré-requisito para qualquer ACL via claim |
-| 3 | `create-tenant` callable | Habilita onboarding completo (depende de #1 e #2) |
-| 4 | `content-job-worker` | Habilita pipeline IA (depende de #1, #2, #3) |
-| 5 | `content-job-watcher` | Defesa contra jobs travados (entra com #4) |
-| 6 | `storage-cleanup-on-job-failed` | Higiene operacional (entra com #4 ou depois) |
-| 7 | `billing-webhook` | Bloqueado até Stripe ser re-conectado em V2 (decisão pendente) |
-| 8 | `billing-retry-cron` | Junto com #7 |
+| # | Função | Status | Notas |
+|---|---|---|---|
+| 1 | `auth-on-create` | ✅ implementada | Gen 1 Auth trigger; cria `users/{uid}` |
+| 2 | `memberships-on-write` | ✅ implementada | Gen 1 Firestore trigger; sync custom claims |
+| 3 | `create-tenant` (callable) | ✅ implementada | Gen 1 HTTPS callable; onboarding atômico (txn 5 docs) |
+| 4 | `content-job-worker` | ⬜ pendente | Pipeline IA (depende de #1, #2, #3) |
+| 5 | `content-job-watcher` | ⬜ pendente | Defesa contra jobs travados (entra com #4) |
+| 6 | `storage-cleanup-on-job-failed` | ⬜ pendente | Higiene operacional (entra com #4 ou depois) |
+| 7 | `billing-webhook` | ⬜ pendente | Bloqueado até Stripe ser re-conectado em V2 (decisão pendente) |
+| 8 | `billing-retry-cron` | ⬜ pendente | Junto com #7 |
 
 ---
 

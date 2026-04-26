@@ -896,6 +896,7 @@ Provisionamento idempotente via [`scripts/provision-firebase-base.mjs`](scripts/
 |---|---|---|---|
 | `authOnCreate` | **Gen 1** (obrigatório) | `providers/firebase.auth/eventTypes/user.create` | Cria `users/{uid}` ao signup. Idempotente. |
 | `membershipsOnWrite` | **Gen 1** (obrigatório, ver gotcha 3) | `providers/cloud.firestore/eventTypes/document.write` em `memberships/{id}` | Sincroniza custom claims `tenants[]` + `roles{}` a partir de memberships ativos do user. Idempotente (re-query + compare JSON). |
+| `createTenant` | **Gen 1** HTTPS callable | HTTP `--allow-unauthenticated` (auth via `context.auth`) | Onboarding atômico em transação Firestore: cria `slugs/{slug}` + `tenants/{tid}` + `memberships/{uid}__{tid}` + atualiza `users/{uid}.defaultTenantId` (apenas no primeiro tenant) + `audit_logs/{lid}`. Retorna `{ tenantId, membershipId, isFirstTenant }`. Múltiplos tenants permitidos por user. Pós-call, `membershipsOnWrite` sincroniza custom claims em chain. |
 
 **Composite indexes Firestore** (em [`firebase/firestore.indexes.json`](firebase/firestore.indexes.json)):
 
