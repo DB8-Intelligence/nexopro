@@ -4,3 +4,4 @@
 // Mantemos uma export por função para deploy granular (`firebase deploy --only functions:authOnCreate`).
 
 export { authOnCreate } from './auth/on-create'
+export { membershipsOnWrite } from './memberships/on-write'
