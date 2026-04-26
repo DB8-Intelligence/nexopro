@@ -15,6 +15,8 @@ Este documento desenha o modelo Firestore + Storage inicial para o NexoOmnix V2.
 5. **Server-side writes only para dados sensíveis** — `ai_usage`, `billing_events`, `audit_logs`, `memberships` (criação/role-change) escrevem apenas via Admin SDK em backend confiável (Cloud Functions / Cloud Run)
 6. **Optimistic local reads via SDK regras-protegidas** — clients leem via Firebase SDK direto, regras garantem ACL
 7. **Schema-on-read disciplinado** — Firestore não impõe schema; convenção e validação client/server compensam
+8. **`runTransaction()` obrigatório para writes multi-doc** — qualquer operação que crie/atualize 2+ docs relacionados (onboarding, plan change, membership invite/accept) deve ser transacional para evitar estado parcial em caso de falha. Detalhe em [model-validation.md § Padrão C](model-validation.md)
+9. **Shadow collections para unicidade** — Firestore não tem unique constraint; campos que precisam ser únicos (`slug` de tenant, `stripeCustomerId`) usam collection auxiliar com o valor como document ID (ver collections 10 e 11)
 
 ---
 
@@ -106,6 +108,8 @@ Sincronizar claims do JWT do Firebase Auth com membership ativos:
 **ACL (regras conceituais):**
 - Read: `request.auth.uid == userId` (próprio doc apenas)
 - Write: `request.auth.uid == userId` (campos limitados — não pode mudar `createdAt`); writes de `defaultTenantId` requerem que o tenant esteja em claims/memberships
+
+**Provisão automática:** Cloud Function trigger **`functions.auth.user().onCreate(user => ...)`** cria `users/{uid}` automaticamente após signup no Firebase Auth. Garante que o doc Firestore sempre existe, mesmo que o client não chame explicitamente. Idempotente.
 
 **Custo/performance:** baixo. Read por sessão, write esporádico (login + perfil edit).
 
@@ -305,6 +309,11 @@ Sincronizar claims do JWT do Firebase Auth com membership ativos:
 | `talkingObject` | map? | personagem selecionado |
 | `error` | string? | quando status=failed |
 | `costSummary` | map | breakdown {anthropic, fal, tts} |
+| `lastHeartbeatAt` | Timestamp? | server atualiza a cada ~10s durante execução |
+| `expireAt` | Timestamp? | createdAt + maxDuration; watcher marca como `failed` se passar |
+| `attempts` | number | tentativas até agora (default 0) |
+| `maxAttempts` | number | default 3 |
+| `nextAttemptAt` | Timestamp? | quando retry pode rodar (backoff exponencial) |
 | `createdAt` / `updatedAt` | Timestamp | |
 | `completedAt` | Timestamp? | |
 
@@ -337,6 +346,9 @@ Sincronizar claims do JWT do Firebase Auth com membership ativos:
 | `processedAt` | Timestamp? | quando handler completou |
 | `outcome` | string | `success\|skipped\|error` |
 | `error` | string? | |
+| `retryCount` | number | tentativas até agora (default 0) |
+| `nextRetryAt` | Timestamp? | quando reprocessar (backoff exp); cron varre `outcome='error' AND nextRetryAt<=now()` |
+| `lastError` | string? | última mensagem de erro para diagnose |
 | `receivedAt` | Timestamp | server-set |
 
 **Índices:**
@@ -383,6 +395,76 @@ Sincronizar claims do JWT do Firebase Auth com membership ativos:
 **TTL:** retention 1 ano (configurável via `expireAt`).
 
 **Custo/performance:** writes em quantidade considerável; reads esporádicos. Considerar exportar para BigQuery se volume crescer.
+
+---
+
+### 10. `slugs` (root) — shadow collection
+
+**Propósito:** garantir unicidade do `tenants.slug`. Firestore não tem unique constraint nativo; pattern de shadow collection com o slug como document ID resolve.
+
+**Document ID:** `{slug}` (ex: `salao-bella`)
+
+**Campos principais:**
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `tenantId` | string | dono atual do slug |
+| `createdAt` | Timestamp | server-set |
+
+**Índices:** automático por document ID. Sem índices compostos.
+
+**ACL:**
+- Read: `if request.auth != null` (auth pode checar disponibilidade de slug pré-create)
+- Write: **server-only** (escrita inteiramente dentro de transaction de onboarding)
+
+**Operação típica** (criar tenant com slug único):
+
+```typescript
+await db.runTransaction(async (txn) => {
+  const slugRef = db.doc(`slugs/${slug}`)
+  const slugDoc = await txn.get(slugRef)
+  if (slugDoc.exists) throw new Error('slug taken')
+  txn.create(slugRef, { tenantId, createdAt: FieldValue.serverTimestamp() })
+  txn.create(db.doc(`tenants/${tenantId}`), { ..., slug })
+  txn.create(db.doc(`memberships/${uid}__${tenantId}`), { role: 'owner', ... })
+})
+```
+
+**Custo/performance:** baixo. 1 read + 1 write por criação de tenant. Se tenant trocar de slug no futuro, função especializada move `tenantId` do antigo para o novo na mesma txn.
+
+---
+
+### 11. `stripe_customer_index` (root) — shadow collection
+
+**Propósito:** lookup direto de tenant a partir de `stripeCustomerId` em webhook handlers, sem precisar de query indexada por campo.
+
+**Document ID:** `{stripeCustomerId}` (ex: `cus_PqXyZ...`)
+
+**Campos principais:**
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `tenantId` | string | tenant dono deste customer |
+| `createdAt` | Timestamp | quando customer foi criado no Stripe |
+| `linkedAt` | Timestamp | quando associação foi escrita aqui |
+
+**Índices:** automático por document ID. Sem compostos.
+
+**ACL:**
+- Read: server-only (handlers de webhook)
+- Write: server-only (criado pela Cloud Function que cria customer no Stripe)
+
+**Operação típica** (webhook handler):
+
+```typescript
+// Em vez de: tenants.where('stripeCustomerId','==',cusId).limit(1).get()
+const idxDoc = await db.doc(`stripe_customer_index/${cusId}`).get()
+const tenantId = idxDoc.data()?.tenantId
+const tenantRef = db.doc(`tenants/${tenantId}`)
+// ...txn read+write em tenantRef e billing_events
+```
+
+**Custo/performance:** 1 get O(1) por webhook em vez de query. Mantida em sync pela mesma função que cria customer no Stripe.
 
 ---
 
