@@ -875,6 +875,23 @@ Migração GCP incremental: Cloud Run primeiro, mantendo Supabase/Auth/Storage/n
 ⬜ Fase A4 — DNS swap nexoomnix.com → Cloud Run após validação
 ```
 
+### FIREBASE V2 FOUNDATION ⚠️ BASE PARALELA — NÃO USAR PARA APP V1
+
+Base Firebase limpa e fechada (`deny-all`) provisionada no projeto GCP `db8-nexoomnix`. **Sem conexão com o app V1 atual** (Supabase + Cloud Run). Decisão sobre uso (V2 do produto, piloto, eventual migração) está pendente — fora do escopo deste setup.
+
+| Componente | Estado |
+|---|---|
+| Projeto GCP | `db8-nexoomnix` |
+| Firestore | `(default)` Native em `us-central1` |
+| Auth | Identity Platform com Email/Password habilitado |
+| Storage | bucket `gs://db8-nexoomnix-default` |
+| Regras atuais | **deny-all** (Firestore + Storage) |
+| Uso atual | base paralela V2, sem conexão com app Supabase atual |
+
+Provisionamento idempotente via [`scripts/provision-firebase-base.mjs`](scripts/provision-firebase-base.mjs). Regras em [`firebase/firestore.rules`](firebase/firestore.rules) e [`firebase/storage.rules`](firebase/storage.rules). Documentação completa: [`docs/firebase/base.md`](docs/firebase/base.md).
+
+**Não fazer** sem decisão explícita: Web App registration, modelagem Firestore, OAuth providers, integração com app V1, conexão a APIs externas.
+
 ---
 
 ## 🗂️ REPOSITORIOS DB8-INTELLIGENCE
