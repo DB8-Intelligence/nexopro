@@ -105,20 +105,118 @@ function TenantDashboard({
   allTenants: string[]
 }) {
   return (
-    <section style={card}>
-      <h2 style={{ margin: 0, fontSize: 16 }}>Tenant ativo</h2>
-      <dl style={{ margin: '16px 0 0', display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, fontSize: 13 }}>
-        <dt style={{ color: '#888' }}>tenantId</dt>
-        <dd style={{ margin: 0, fontFamily: 'monospace' }}>{tenantId}</dd>
-        <dt style={{ color: '#888' }}>role</dt>
-        <dd style={{ margin: 0 }}>{role ?? '—'}</dd>
-        <dt style={{ color: '#888' }}>total tenants</dt>
-        <dd style={{ margin: 0 }}>{allTenants.length}</dd>
-      </dl>
-      <p style={{ marginTop: 24, color: '#666', fontSize: 12 }}>
-        Estado mínimo de validação. Próximas iterações: ler {`tenants/{tenantId}`} via callable
-        seguro, exibir nome/plano/branding, listar membros.
+    <>
+      <section style={card}>
+        <h2 style={{ margin: 0, fontSize: 16 }}>Tenant ativo</h2>
+        <dl style={{ margin: '16px 0 0', display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, fontSize: 13 }}>
+          <dt style={{ color: '#888' }}>tenantId</dt>
+          <dd style={{ margin: 0, fontFamily: 'monospace' }}>{tenantId}</dd>
+          <dt style={{ color: '#888' }}>role</dt>
+          <dd style={{ margin: 0 }}>{role ?? '—'}</dd>
+          <dt style={{ color: '#888' }}>total tenants</dt>
+          <dd style={{ margin: 0 }}>{allTenants.length}</dd>
+        </dl>
+        <p style={{ marginTop: 24, color: '#666', fontSize: 12 }}>
+          Estado mínimo de validação. Próximas iterações: ler {`tenants/{tenantId}`} via callable
+          seguro, exibir nome/plano/branding, listar membros.
+        </p>
+      </section>
+
+      {tenantId && <ContentJobForm tenantId={tenantId} />}
+    </>
+  )
+}
+
+interface CreateContentJobOutput {
+  jobId: string
+  path: string
+  status: 'queued'
+  expiresInDays: number
+}
+
+function ContentJobForm({ tenantId }: { tenantId: string }) {
+  const [type, setType] = useState<'text' | 'image' | 'reel'>('text')
+  const [prompt, setPrompt] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<CreateContentJobOutput | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    setResult(null)
+    try {
+      const fn = httpsCallable<
+        { tenantId: string; type: string; prompt: string },
+        CreateContentJobOutput
+      >(functions, 'createContentJob')
+      const res = await fn({
+        tenantId,
+        type,
+        prompt: prompt.trim(),
+      })
+      setResult(res.data)
+      setPrompt('')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(msg)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section style={{ ...card, marginTop: 16 }}>
+      <h2 style={{ margin: 0, fontSize: 16 }}>Criar content job</h2>
+      <p style={{ margin: '4px 0 16px', color: '#888', fontSize: 13 }}>
+        Cria <code>tenants/{tenantId}/content_jobs/&#123;jobId&#125;</code> em status{' '}
+        <code>queued</code>. Sem worker ainda — sem chamada a IA, sem custo externo.
       </p>
+
+      <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <label style={label}>
+          Tipo
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as 'text' | 'image' | 'reel')}
+            style={input}
+          >
+            <option value="text">text</option>
+            <option value="image">image</option>
+            <option value="reel">reel</option>
+          </select>
+        </label>
+        <label style={label}>
+          Prompt
+          <textarea
+            required
+            maxLength={5000}
+            placeholder="Ex: Gere um post para Instagram sobre cuidados com cabelo cacheado…"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            style={{ ...input, minHeight: 100, resize: 'vertical', fontFamily: 'inherit' }}
+          />
+          <small style={{ color: '#666' }}>1-5000 chars</small>
+        </label>
+
+        <button type="submit" disabled={busy || !prompt.trim()} style={primaryBtn}>
+          {busy ? 'Criando…' : 'Criar job'}
+        </button>
+      </form>
+
+      {result && (
+        <div style={successBox}>
+          <strong>Job criado ✓</strong>
+          <pre style={{ margin: '8px 0 0', fontSize: 12 }}>{JSON.stringify(result, null, 2)}</pre>
+          <p style={{ margin: '8px 0 0', fontSize: 12, color: '#888' }}>
+            Documento em status <code>queued</code>, aguardando worker (não implementado nesta fase).
+            TTL: {result.expiresInDays} dias.
+          </p>
+        </div>
+      )}
+
+      {error && <pre style={errBox}>{error}</pre>}
     </section>
   )
 }

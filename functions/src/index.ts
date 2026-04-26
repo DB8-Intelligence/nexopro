@@ -6,3 +6,4 @@
 export { authOnCreate } from './auth/on-create'
 export { membershipsOnWrite } from './memberships/on-write'
 export { createTenant } from './tenants/create-tenant'
+export { createContentJob } from './content-jobs/create'
