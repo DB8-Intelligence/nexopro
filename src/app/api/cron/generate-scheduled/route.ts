@@ -12,10 +12,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { buildAutopilotPostPrompt, buildAnalysisPrompt } from '@/lib/content-ai/prompts'
+import { buildAutopilotPostPrompt } from '@/lib/content-ai/prompts'
 import { loadBrandingContext } from '@/lib/content-ai/branding-context'
 import { composePostUrl } from '@/lib/content-ai/compose-url'
-import { dispatchReelGeneration, reelCallbackUrl, type ReelBriefing } from '@/lib/content-ai/reel-dispatcher'
 import { toZonedTime, fromZonedTime } from 'date-fns-tz'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -63,131 +62,6 @@ interface GeneratedPost {
   hashtags: string[]
   ctas: { text: string; type: string; value: string }[]
   image_concept: string
-}
-
-interface GeneratedReelAnalysis {
-  title:            string
-  target_audience:  string
-  key_messages:     string[]
-  tone:             string
-  suggested_format: string
-  hook:             string
-  cta:              string
-  scenes: Array<{
-    id:           number
-    description:  string
-    duration_sec: number
-    image_prompt: string
-  }>
-}
-
-async function generateReelDraft(
-  supabase: SupabaseClient,
-  anthropic: Anthropic,
-  schedule: ScheduleRow,
-): Promise<{ ok: boolean; message?: string; projectId?: string; jobId?: string | null; dispatchConfigured?: boolean }> {
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('name, niche, plan')
-    .eq('id', schedule.tenant_id)
-    .single()
-
-  if (!tenant) return { ok: false, message: 'Tenant não encontrado' }
-  // Gate de plano: reels são plano Pro Plus+ (alinhado com limites de ContentAI)
-  if (!['pro_plus', 'pro_max', 'enterprise'].includes(tenant.plan as string)) {
-    return { ok: false, message: `Plano ${tenant.plan} sem acesso a reel autopilot` }
-  }
-
-  const branding = await loadBrandingContext(supabase, schedule.tenant_id)
-
-  // 1) Gera roteiro + cenas (analysis) + copy (package) — PARTE INLINE (rápida).
-  const source = schedule.topic_hint?.trim()
-    ? schedule.topic_hint
-    : `Gere um reel curto (${schedule.duration_sec}s) relevante e atual para ${tenant.niche}.`
-
-  const analysisPrompt = buildAnalysisPrompt(source, tenant.niche ?? 'negócio', branding)
-  const analysisMsg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 2000,
-    messages: [{ role: 'user', content: analysisPrompt }],
-  })
-  const analysisText = analysisMsg.content[0].type === 'text' ? analysisMsg.content[0].text : ''
-  let analysis: GeneratedReelAnalysis
-  try { analysis = JSON.parse(analysisText) as GeneratedReelAnalysis }
-  catch { return { ok: false, message: 'Analysis inválida (JSON parse)' } }
-
-  // 2) Cria content_project em status 'generating_video' com analysis + scenes.
-  const { data: project, error: projErr } = await supabase
-    .from('content_projects')
-    .insert({
-      tenant_id:          schedule.tenant_id,
-      user_id:            schedule.user_id,
-      schedule_id:        schedule.id,
-      title:              analysis.title,
-      nicho:              tenant.niche,
-      formato:            'reel',
-      status:             'generating_video',
-      analysis,
-      generated_scenes:   analysis.scenes,
-      source_description: schedule.topic_hint ?? null,
-    })
-    .select('id')
-    .single()
-
-  if (projErr || !project) {
-    return { ok: false, message: projErr?.message ?? 'Falha ao criar content_project' }
-  }
-
-  // 3) Dispara job externo. n8n/Railway orquestra: imagens Fal → voz → FFmpeg → upload → callback.
-  const briefing: ReelBriefing = {
-    project_id:   project.id,
-    tenant_id:    schedule.tenant_id,
-    caption:      analysis.hook + '\n\n' + analysis.key_messages.join('\n'),
-    hashtags:     [],
-    duration_sec: schedule.duration_sec,
-    scenes:       analysis.scenes,
-    voice_script: analysis.key_messages.join(' '),
-    branding: {
-      tone:         branding?.tone ?? null,
-      colors:       branding?.colors ?? null,
-      differential: branding?.differential ?? null,
-    },
-  }
-
-  const dispatch = await dispatchReelGeneration(briefing, reelCallbackUrl())
-
-  await supabase
-    .from('content_projects')
-    .update({
-      generation_job_id:     dispatch.job_id ?? null,
-      generation_started_at: new Date().toISOString(),
-      generation_error:      dispatch.error ?? null,
-    })
-    .eq('id', project.id)
-
-  // Notificação: varia conforme o job foi ou não despachado.
-  const notifTitle = dispatch.configured && !dispatch.error
-    ? 'Reel em geração'
-    : 'Reel na fila (pendente configuração)'
-  const notifMsg = dispatch.configured && !dispatch.error
-    ? `"${analysis.title}" está sendo renderizado. Te avisamos quando ficar pronto.`
-    : `"${analysis.title}" aguardando o pipeline de reel ser configurado (${dispatch.error ?? 'webhook ausente'}).`
-
-  await supabase.from('notifications').insert({
-    tenant_id:  schedule.tenant_id,
-    profile_id: schedule.user_id,
-    title:      notifTitle,
-    message:    notifMsg,
-    type:       'ia',
-    link:       `/conteudo/${project.id}`,
-  })
-
-  return {
-    ok: true,
-    projectId: project.id,
-    jobId: dispatch.job_id ?? null,
-    dispatchConfigured: dispatch.configured,
-  }
 }
 
 async function getUsageCount(supabase: SupabaseClient, id: string): Promise<number> {
@@ -397,14 +271,16 @@ export async function GET(req: NextRequest) {
     message?: string
     projectId?: string
     scheduledPostId?: string | null
-    jobId?: string | null
-    dispatchConfigured?: boolean
   }[] = []
 
   for (const schedule of schedules) {
     try {
+      // Schedules com format='reel' são legacy do pipeline Reel Creator (descontinuado).
+      // O enum ainda existe no DB; aqui no cron viram no-op até a Phase D recriar
+      // o enum sem 'reel'. Não bloqueamos o avanço do next_run_at — caso contrário
+      // o schedule reentraria no scan a cada execução.
       const result = schedule.format === 'reel'
-        ? await generateReelDraft(supabase, anthropic, schedule)
+        ? { ok: false, message: 'format reel descontinuado — schedule é no-op até Phase D' }
         : await generateOneDraft(supabase, anthropic, schedule)
       results.push({ id: schedule.id, ...result })
 
