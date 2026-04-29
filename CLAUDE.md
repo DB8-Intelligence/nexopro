@@ -33,15 +33,15 @@ Toda a plataforma, todos os nichos, todas as landing pages e todas as features v
 
 ```
 Frontend:   Next.js 14 (App Router) + TypeScript + Tailwind CSS + shadcn/ui
-Backend DB: Supabase (PostgreSQL + Auth + Storage + Realtime)
-Backend IA: db8-agent (Python/FastAPI) no Railway — MANTER, nunca migrar
-Automação:  n8n no Railway — MANTER
-Deploy:     Vercel (preview automático em cada PR)
-IA texto:   Anthropic API — claude-sonnet-4-20250514
-IA imagem:  Fal.ai (Flux Pro) — para ContentAI
-IA voz:     ElevenLabs API — para ContentAI
-Pagamento:  Stripe (fase 8 — ainda não implementado)
-Email:      Resend (fase 8 — ainda não implementado)
+Backend:    Cloud Run (Next.js standalone — App Router server actions + API routes)
+Backend DB: Supabase (PostgreSQL + Auth + Storage + Realtime) — V1 ativo
+Auth V2:    Firebase (db8-nexoomnix) — base paralela, sem conexão com V1
+Automação:  n8n no Railway — uso parcial (skill factory; pipelines legacy removidos)
+IA texto:   Anthropic API (via guardAICall — cost control wrapper)
+IA imagem:  Fal.ai (Flux Pro) — via bridge AI cost control
+IA voz:     ElevenLabs API — via bridge AI cost control
+Pagamento:  Stripe — somente planos principais (sem add-ons)
+Email:      Resend
 ```
 
 ---
@@ -66,9 +66,7 @@ Railway Projeto 1 — db8-agent
 Railway Projeto 2 — db8-n8n
   URL:   https://automacao.db8intelligence.com.br
   Stack: n8n + PostgreSQL
-  Workflows ativos:
-    ImobCreator Central Router
-    (video_completed, video_failed, creative_ready, new_user)
+  Workflows ativos: skill factory (geração de skills por nicho)
 
 Supabase — banco principal (unificado)
   Ver secao de banco de dados abaixo.
@@ -250,10 +248,6 @@ type Niche =
   | 'financas'    // Contabilidade / Consultoria Financeira
 ```
 
-> ⚠️ **Nota de escopo:** o nicho `imoveis` foi removido do escopo do produto.
-> Constraint, tabelas e colunas relacionadas (migrations 004 e 010) ainda estão
-> em prod e serão limpas em Sprint Cleanup 3 (com plano de migração).
-
 Config em: `src/lib/niche-config.ts`
 
 ---
@@ -311,21 +305,13 @@ CRM Pipeline (013):     crm_pipelines · crm_stages · crm_deals
                         crm_deal_channels · crm_activities
                         crm_messages · crm_message_templates
 AI Cost Control (023):  ai_usage  (rate limit + audit trail por tenant/tipo)
-Phase D Cleanup (024):  drop tabelas/colunas/enums/rows legacy de Reel
-                        Creator AI, Talking Objects e Imóveis (aplicada
-                        em 2026-04-29 via Supabase MCP). Schema agora
-                        reflete o produto vigente — sem properties/
-                        property_media/brand_templates, sem add-on
-                        talking_objects, sem 'imobiliario' em crm_type
-                        nem 'reel' em schedule_format.
+Schema Cleanup (024):   drop de tabelas/colunas/enums/rows legacy de
+                        features removidas. Aplicada em prod 2026-04-29
+                        via Supabase MCP. Schema agora reflete o produto
+                        vigente (ver CLEAN STATE GUARANTEE no fim).
 ```
 
-> ℹ️ **Migrations históricas que ficaram fora de escopo** (já neutralizadas
-> pela mig 024): `004_imob_module`, `005_content_ai` (colunas talking_object_*),
-> `010_talking_objects_addon`, `021_schedule_reel_format` (enum value 'reel').
-> Não editar migrations aplicadas — a remoção foi feita em 024.
-
-> Migration 023 aplicada em prod via MCP Supabase em 2026-04-24. Validar se ainda está consistente antes do próximo release.
+> Migration 023 aplicada em prod via MCP Supabase em 2026-04-24. Migration 024 aplicada em 2026-04-29.
 
 ### Migration 005_content_ai.sql (Fase 7) — referência
 ```sql
@@ -516,12 +502,10 @@ git push origin main           # Vercel deploy automatico
 ✅ Middleware: rotas públicas de todas as landing pages
 ```
 
-> ⚠️ Landing `imobpro` está fora do escopo. Rota e código serão removidos em Sprint Cleanup 2.
-
 ### FASE 6 — REMOVIDA DO ESCOPO ❌
 
-Módulo de imóveis foi removido do escopo do produto.
-Código, rotas, components e tabelas relacionadas serão limpos em Sprint Cleanup 2/3.
+Fase originalmente vertical de nicho hoje fora de escopo. Limpeza de
+código, schema e infra concluída em Sprint Cleanup 3 (2026-04-29).
 
 ### FASE 7 — CONTENTAI ✅ 100%
 
@@ -537,11 +521,9 @@ Código, rotas, components e tabelas relacionadas serão limpos em Sprint Cleanu
 ✅ FAL_KEY e ELEVENLABS_API_KEY no .env.example
 ```
 
-> ⚠️ Sub-feature **talking objects** + módulo **Reel Creator AI / ViralObj** (pipeline
-> automático de geração de reels) foram removidos do escopo. Código, rotas, components
-> e libs relacionadas foram limpos em Sprint Cleanup 3 Fases A/B/C.
-> **Importante**: "reel" como **formato de publicação** (Instagram Reels via Meta Graph
-> API) continua válido — o que saiu foi a geração automática com IA, não o formato.
+> ℹ️ Sub-features de geração automática descontinuadas em Sprint Cleanup 3
+> (2026-04-29). Formatos de publicação (reel/post/carrossel/stories) via Meta
+> Graph API continuam suportados — apenas o pipeline de geração interno saiu.
 
 ### FASE 8 — MONETIZACAO ✅ 100%
 
@@ -637,9 +619,8 @@ Features construídas depois do fechamento da FASE 10, ainda não deployadas em 
 ✅ APIs novas: /api/branding, /api/crm, /api/meta, /api/skills
 ```
 
-> ⚠️ Features `ReelCreator AI`, `Photo Object`, `Reference image library`, `Talking Objects`,
-> `Reel Analyzer` e variante CRM `imobiliario` foram removidas do escopo.
-> Limpeza de código/rotas em Sprint Cleanup 2; schema/banco em Sprint Cleanup 3.
+> ℹ️ Várias features experimentais foram retiradas do escopo (código + schema)
+> em Sprint Cleanup 3 (2026-04-29). Detalhes em CLEAN STATE GUARANTEE no fim.
 
 ### ARCHITECTURE REFACTOR — Sprints 0-11 (Abr 2026) ✅
 
@@ -673,7 +654,7 @@ Refactor estrutural concluído em 12 sprints. Saiu de "tudo em `src/lib/`" para 
 
 Helper: src/modules/platform/ai-cost-control/index.ts → guardAICall()
 Tabela: ai_usage (tenant_id, kind, route, plan, cost_estimate, created_at)
-Rotas:  /api/ai/* · /api/content-ai/* (rotas /api/reel-creator/* foram removidas em Sprint Cleanup 3 Fase A)
+Rotas:  /api/ai/* · /api/content-ai/*
 ```
 
 **REGRA CRÍTICA:** toda nova rota que invoque Anthropic, Fal.ai, ElevenLabs, OpenAI TTS, Replicate ou qualquer provider pago de IA deve obrigatoriamente passar por `guardAICall()` antes da chamada externa. Sem exceção — rate limit + plan gate são pré-condição arquitetural.
@@ -704,21 +685,41 @@ Migração GCP incremental: Cloud Run primeiro, mantendo Supabase/Auth/Storage/n
 
 **Não migrar:** Supabase, n8n (Railway), db8-agent (Railway), provedores externos (Stripe, Resend, Anthropic, Fal.ai, ElevenLabs, OpenAI, Canva, Meta). Vercel pode ficar de standby pós-A4 para rollback rápido.
 
-### SPRINT 1 — PATH TO REVENUE (em andamento)
+### STATUS (2026-04-29)
 
 ```text
-⬜ Mergear branch atual em main via PR (15 commits ahead)
-⬜ Aplicar migrations 008-013 em Supabase producao
-⬜ Validar migration 023 (ai_usage) em prod — aplicada via MCP em 2026-04-24, confirmar consistência
-✅ Domínio customizado no Vercel: nexoomnix.com (único domínio — multi-domain descartado)
-⬜ Validar Stripe Live (webhook, price IDs, checkout real)
-⬜ Validar Resend (email transacional)
-⬜ Smoke test end-to-end: cadastro → trial → checkout → login → feature Pro
-⬜ Resolver 11 vulnerabilidades Dependabot (6 high, 5 moderate)
-⬜ Commitar arquivos Cloud Run Fase A1 (Dockerfile, .dockerignore, docs/deploy/, next.config.mjs)
+✅ Cleanup completo (features experimentais retiradas do escopo)
+✅ Schema alinhado com produto real (migration 024 aplicada em produção)
+✅ Billing simplificado (somente planos principais, sem add-ons)
+✅ Infra base funcional (Cloud Run preparado + Supabase ativo)
+✅ Domínio customizado: nexoomnix.com
+✅ Migrations 001-024 aplicadas em prod
+```
+
+🔴 **Pendências reais** (path-to-revenue):
+
+```text
+⬜ Validar Stripe Live (checkout + webhook em https://nexoomnix.com/api/webhooks/stripe)
+⬜ Validar Resend (welcome / payment_failed / trial_ending emails)
+⬜ Smoke test end-to-end (cadastro → trial → checkout → login → feature Pro)
+⬜ Resolver 8 vulnerabilidades Dependabot (4 high, 4 moderate)
+```
+
+🟠 **Migração GCP — Cloud Run** (incremental, opcional):
+
+```text
+✅ Fase A1 — Dockerfile + standalone + cloudbuild.yaml preparados
 ⬜ Fase A2 — docker build local + deploy Cloud Run em URL provisória
 ⬜ Fase A3 — Cloud Scheduler substitui crons Vercel
-⬜ Fase A4 — DNS swap nexoomnix.com → Cloud Run após validação
+⬜ Fase A4 — DNS swap nexoomnix.com → Cloud Run + atualizar Stripe webhook URL
+```
+
+🟡 **Pós-Cleanup manual** (fora de código):
+
+```text
+⬜ Drop bucket Supabase Storage 'properties' (vazio) via Dashboard
+⬜ Archive Stripe product de add-on legacy via dashboard.stripe.com
+⬜ Remover env var legacy de add-on no Vercel/Cloud Run
 ```
 
 ### FIREBASE V2 FOUNDATION ⚠️ BASE PARALELA — NÃO USAR PARA APP V1
@@ -766,8 +767,6 @@ Design de demais funções planejadas: [`docs/firebase/cloud-functions.md`](docs
 |------|--------|------|
 | nexopro (este) | ATIVO — base unica | Desenvolver tudo aqui |
 | db8-agent | ATIVO Railway Python/FastAPI | Expandir nas Fases 6-7 |
-| imob-creator-studio | Em uso | Arquivar apos Fase 6 |
-| ReelCreator-AI | Skills criadas | Arquivar apos Fase 7 |
 | nexopro-hub | Duplicata | Arquivar imediatamente |
 | db8-engine | Verificar conteudo | Avaliar antes de arquivar |
 
@@ -775,7 +774,7 @@ Design de demais funções planejadas: [`docs/firebase/cloud-functions.md`](docs
 
 ## 📞 CONTEXTO DO PROJETO
 
-- Formacao: Contador + Corretor de Imoveis + Avaliador de Imoveis
+- Formacao: Contador + Corretor + Avaliador
 - Stack de trabalho: Claude Code (Antigravity), Cursor, Lovable
 - Objetivo: SaaS multi-nicho com receita recorrente (MRR)
 - Nichos prioritarios: Beleza e Servicos Tecnicos
@@ -797,3 +796,16 @@ O servidor MCP que expõe as skills DB8 como ferramentas Claude Code foi extraí
 
 NÃO duplicar desenvolvimento de skills aqui — trabalhar no repo nexoomnix-skills-mcp.
 Os JSONs soltos em `n8n/` deste repo são legacy (pré-factory) e devem sair futuramente.
+
+---
+
+### CLEAN STATE GUARANTEE (2026-04-29)
+
+O sistema **NÃO possui mais**:
+
+- suporte a nicho imobiliário
+- pipeline Reel Creator
+- addon talking_objects
+- dependências diretas de SDKs de IA (todas as chamadas passam por `guardAICall()`)
+
+Qualquer reintrodução desses elementos deve ser tratada como **nova feature** — com discovery, design, ADR e migration próprios. Não restaurar código a partir de history como se fosse rollback.
